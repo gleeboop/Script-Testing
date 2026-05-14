@@ -63,9 +63,33 @@ local SETTING_DEFS = {
 		fmt = "%.0f",
 		desc = "Studs above bounding box",
 	},
-	{ label = "Speed", key = "ORBIT_SPEED", min = 0.1, max = 5.0, step = 0.1, fmt = "%.1f", desc = "Rotations per second" },
-	{ label = "Wave Amp", key = "Y_WAVE_AMP", min = 0, max = 15, step = 0.5, fmt = "%.1f", desc = "Vertical bob height" },
-	{ label = "Wave Spd", key = "Y_WAVE_SPEED", min = 0.1, max = 5.0, step = 0.1, fmt = "%.1f", desc = "Vertical bob speed" },
+	{
+		label = "Speed",
+		key = "ORBIT_SPEED",
+		min = 0.1,
+		max = 5.0,
+		step = 0.1,
+		fmt = "%.1f",
+		desc = "Rotations per second",
+	},
+	{
+		label = "Wave Amp",
+		key = "Y_WAVE_AMP",
+		min = 0,
+		max = 15,
+		step = 0.5,
+		fmt = "%.1f",
+		desc = "Vertical bob height",
+	},
+	{
+		label = "Wave Spd",
+		key = "Y_WAVE_SPEED",
+		min = 0.1,
+		max = 5.0,
+		step = 0.1,
+		fmt = "%.1f",
+		desc = "Vertical bob speed",
+	},
 	{ label = "Helix H", key = "HELIX_SPAN", min = 2, max = 80, step = 2, fmt = "%.0f", desc = "Helix vertical range" },
 }
 
@@ -535,6 +559,8 @@ FlingBtn.MouseButton1Click:Connect(function()
 		end
 		flinging = false
 		FlingBtn.Text = "💥  Fling!"
+		PlayerLabel.Text = "Target: No one"
+		PlayerHL.Parent = nil
 		FlingBtn.BackgroundColor3 = P.red
 	end)
 end)
