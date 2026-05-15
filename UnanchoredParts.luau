@@ -559,7 +559,8 @@ FlingBtn.MouseButton1Click:Connect(function()
 		end
 		flinging = false
 		FlingBtn.Text = "💥  Fling!"
-		PlayerLabel.Text = "Target: No one"
+		PlayerLabel.Text = "⚠  No player selected!"
+		PlayerLabel.TextColor3 = P.sub
 		PlayerHL.Parent = nil
 		FlingBtn.BackgroundColor3 = P.red
 	end)
