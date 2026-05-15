@@ -1,8 +1,4 @@
--- Orbit Island  v7.0
--- Three tabs: Shapes | Settings | Target
--- ============================================================
 
--- ── Instances ─────────────────────────────────────────────────
 local Gui = Instance.new("ScreenGui")
 local Main = Instance.new("Frame")
 local TitleLabel = Instance.new("TextLabel")
@@ -19,7 +15,6 @@ local SettingsLayout = Instance.new("UIListLayout")
 local TargetContent = Instance.new("Frame")
 local OrbitBtn = Instance.new("TextButton")
 
--- ── Services ──────────────────────────────────────────────────
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -34,7 +29,6 @@ else
 	IslandModel = Workspace:WaitForChild("Island")
 end
 
--- ── Config ────────────────────────────────────────────────────
 local Config = {
 	ORBIT_RADIUS = 20,
 	ORBIT_HEIGHT = 5,
@@ -93,7 +87,6 @@ local SETTING_DEFS = {
 	{ label = "Helix H", key = "HELIX_SPAN", min = 2, max = 80, step = 2, fmt = "%.0f", desc = "Helix vertical range" },
 }
 
--- ── Palette ───────────────────────────────────────────────────
 local P = {
 	bg = Color3.fromRGB(24, 24, 28),
 	panel = Color3.fromRGB(36, 36, 42),
@@ -117,7 +110,6 @@ local CONTENT_H = 230
 local ITEM_H = 30
 local SET_ROW_H = 34
 
--- ── Helpers ───────────────────────────────────────────────────
 local function mkCorner(inst, r)
 	local c = Instance.new("UICorner", inst)
 	c.CornerRadius = UDim.new(0, r or 6)
@@ -163,7 +155,6 @@ local function mkSep(parent, yPos)
 	return s
 end
 
--- ── GUI: Main ─────────────────────────────────────────────────
 Gui.Name = "OrbitGUI"
 Gui.Parent = gethui()
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -188,7 +179,6 @@ TitleLabel.TextSize = 14
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 mkCorner(TitleLabel, 10)
 
--- ── Tab bar (three equal tabs) ────────────────────────────────
 TabBar.Parent = Main
 TabBar.BackgroundColor3 = P.panel
 TabBar.BorderSizePixel = 0
@@ -212,7 +202,6 @@ styleTab(TabShapes, "⬤ Shapes", 0, true)
 styleTab(TabSettings, "⚙ Settings", 0.333, false)
 styleTab(TabTarget, "🎯 Target", 0.666, false)
 
--- ── Shared content viewport ───────────────────────────────────
 ContentFrame.Parent = Main
 ContentFrame.BackgroundColor3 = P.panel
 ContentFrame.BorderSizePixel = 0
@@ -220,7 +209,6 @@ ContentFrame.Position = UDim2.new(0, 0, 0, 62)
 ContentFrame.Size = UDim2.new(1, 0, 0, CONTENT_H)
 ContentFrame.ClipsDescendants = true
 
--- ── Shapes content ────────────────────────────────────────────
 ShapesContent.Parent = ContentFrame
 ShapesContent.BackgroundTransparency = 1
 ShapesContent.BorderSizePixel = 0
@@ -240,7 +228,6 @@ ShapesPadding.PaddingBottom = UDim.new(0, 4)
 ShapesPadding.PaddingLeft = UDim.new(0, 5)
 ShapesPadding.PaddingRight = UDim.new(0, 5)
 
--- ── Settings content ──────────────────────────────────────────
 SettingsContent.Parent = ContentFrame
 SettingsContent.BackgroundTransparency = 1
 SettingsContent.BorderSizePixel = 0
@@ -256,14 +243,12 @@ stgPad.PaddingTop = UDim.new(0, 5)
 stgPad.PaddingLeft = UDim.new(0, 6)
 stgPad.PaddingRight = UDim.new(0, 6)
 
--- ── Target content ────────────────────────────────────────────
 TargetContent.Parent = ContentFrame
 TargetContent.BackgroundTransparency = 1
 TargetContent.BorderSizePixel = 0
 TargetContent.Size = UDim2.new(1, 0, 1, 0)
 TargetContent.Visible = false
 
--- Orbit center section
 local OC_Header = mkLabel(
 	TargetContent,
 	"📍  Orbit Center",
@@ -300,7 +285,6 @@ local IslandBtn = mkBtn(
 
 mkSep(TargetContent, 116)
 
--- Player fling section
 local PL_Header = mkLabel(
 	TargetContent,
 	"💥  Player Fling",
@@ -329,7 +313,6 @@ plPad.PaddingLeft = UDim.new(0, 5)
 local ClickPlayerBtn = mkBtn(TargetContent, "👤  Click a Player", UDim2.new(0, 8, 0, 168), UDim2.new(1, -16, 0, 26))
 local FlingBtn = mkBtn(TargetContent, "💥  Fling!", UDim2.new(0, 8, 0, 198), UDim2.new(1, -16, 0, 26), P.red)
 
--- ── Orbit toggle button ───────────────────────────────────────
 OrbitBtn.Parent = Main
 OrbitBtn.BackgroundColor3 = P.row
 OrbitBtn.BorderSizePixel = 0
@@ -342,7 +325,6 @@ OrbitBtn.TextSize = 13
 OrbitBtn.AutoButtonColor = false
 mkCorner(OrbitBtn, 6)
 
--- ── Tab switching ─────────────────────────────────────────────
 local tabBtns = { TabShapes, TabSettings, TabTarget }
 local tabPanels = { ShapesContent, SettingsContent, TargetContent }
 
@@ -363,7 +345,6 @@ TabTarget.MouseButton1Click:Connect(function()
 	switchTab(3)
 end)
 
--- ── RightControl hides GUI ────────────────────────────────────
 local mainVisible = true
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if input.KeyCode == Enum.KeyCode.RightControl and not gpe then
@@ -372,7 +353,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
--- ── World objects: orbit center indicator ─────────────────────
 local CenterPart = Instance.new("Part")
 CenterPart.Name = "_OrbitCenter"
 CenterPart.Size = Vector3.new(1, 1, 1)
@@ -404,7 +384,6 @@ PlayerHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 PlayerHL.Adornee = nil
 PlayerHL.Parent = nil
 
--- ── Orbit center state ────────────────────────────────────────
 local orbitMode = "island" -- "island" | "custom"
 local customCenter = Vector3.new(0, 0, 0)
 
@@ -423,7 +402,6 @@ local function setModeLabel(txt)
 	ModeLabel.Text = "Mode:  " .. txt
 end
 
--- ── Click mode state ──────────────────────────────────────────
 local clickMode = nil -- nil | "place" | "player"
 local selectedPlayer = nil
 local flinging = false
@@ -436,7 +414,6 @@ local function cancelClickMode()
 	ClickPlayerBtn.Text = "👤  Click a Player"
 end
 
--- Single global click interceptor
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe then
 		return
@@ -495,7 +472,6 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
--- ── Target tab buttons ────────────────────────────────────────
 PlaceBtn.MouseButton1Click:Connect(function()
 	if clickMode == "place" then
 		cancelClickMode()
@@ -566,7 +542,6 @@ FlingBtn.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ── Network ownership ─────────────────────────────────────────
 local Folder = Instance.new("Folder", Workspace)
 
 if not getgenv().Network then
@@ -595,7 +570,6 @@ if not getgenv().Network then
 	EnablePartControl()
 end
 
--- ── Shape math ────────────────────────────────────────────────
 local function polygonPoint(a, R, n)
 	local s = (2 * math.pi) / n
 	local t = (a % s) - s / 2
@@ -621,7 +595,6 @@ local function spiralPoint(a, R, t)
 	return math.cos(a) * R * s, math.sin(a) * R * s
 end
 
--- ── SHAPES ────────────────────────────────────────────────────
 local SHAPES = {
 	{
 		name = "Circle",
@@ -721,7 +694,6 @@ local SHAPES = {
 local currentShapeIndex = 1
 local shapeButtons = {}
 
--- ── Build shape list ──────────────────────────────────────────
 local function buildShapeList()
 	for idx, shape in ipairs(SHAPES) do
 		local btn = Instance.new("TextButton", ShapesContent)
@@ -758,7 +730,6 @@ local function buildShapeList()
 	ShapesContent.CanvasSize = UDim2.new(0, 0, 0, #SHAPES * ITEM_H + (#SHAPES - 1) * 3 + 8)
 end
 
--- ── Build settings sliders ────────────────────────────────────
 local activeDrag = nil
 
 local function applyFrac(frac, def, fill, thumb, valLbl)
@@ -859,7 +830,6 @@ UserInputService.InputEnded:Connect(function(inp)
 	end
 end)
 
--- ── Orbit engine ──────────────────────────────────────────────
 orbitParts = {}
 
 local function ForcePart(v)
@@ -978,7 +948,6 @@ local function toggleOrbit()
 	end
 end
 
--- ── Init ──────────────────────────────────────────────────────
 buildShapeList()
 buildSettingsSliders()
 
