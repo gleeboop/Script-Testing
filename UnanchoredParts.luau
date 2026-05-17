@@ -163,7 +163,7 @@ Main.Parent = Gui
 Main.BackgroundColor3 = P.bg
 Main.BorderSizePixel = 0
 Main.Position = UDim2.new(0.04, 0, 0.18, 0)
-Main.Size = UDim2.new(0, 225, 0, 325)
+Main.Size = UDim2.new(0, 225, 0, 365)
 Main.Active = true
 Main.Draggable = true
 mkCorner(Main, 10)
@@ -328,7 +328,7 @@ mkCorner(LoopFlingBtn, 5)
 OrbitBtn.Parent = Main
 OrbitBtn.BackgroundColor3 = P.row
 OrbitBtn.BorderSizePixel = 0
-OrbitBtn.Position = UDim2.new(0.05, 0, 0, 290)
+OrbitBtn.Position = UDim2.new(0.05, 0, 0, 330)
 OrbitBtn.Size = UDim2.new(0.90, 0, 0, 28)
 OrbitBtn.Font = Enum.Font.GothamBold
 OrbitBtn.Text = "Orbit  |  Off"
