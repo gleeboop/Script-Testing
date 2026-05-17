@@ -1,4 +1,3 @@
-
 local Gui = Instance.new("ScreenGui")
 local Main = Instance.new("Frame")
 local TitleLabel = Instance.new("TextLabel")
@@ -14,6 +13,7 @@ local SettingsContent = Instance.new("Frame")
 local SettingsLayout = Instance.new("UIListLayout")
 local TargetContent = Instance.new("Frame")
 local OrbitBtn = Instance.new("TextButton")
+local LoopFlingBtn = Instance.new("TextButton")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -106,7 +106,7 @@ local P = {
 	active = Color3.fromRGB(180, 130, 20),
 }
 
-local CONTENT_H = 230
+local CONTENT_H = 262
 local ITEM_H = 30
 local SET_ROW_H = 34
 
@@ -313,6 +313,18 @@ plPad.PaddingLeft = UDim.new(0, 5)
 local ClickPlayerBtn = mkBtn(TargetContent, "👤  Click a Player", UDim2.new(0, 8, 0, 168), UDim2.new(1, -16, 0, 26))
 local FlingBtn = mkBtn(TargetContent, "💥  Fling!", UDim2.new(0, 8, 0, 198), UDim2.new(1, -16, 0, 26), P.red)
 
+LoopFlingBtn.Parent = TargetContent
+LoopFlingBtn.BackgroundColor3 = P.red
+LoopFlingBtn.BorderSizePixel = 0
+LoopFlingBtn.Position = UDim2.new(0, 8, 0, 228)
+LoopFlingBtn.Size = UDim2.new(1, -16, 0, 26)
+LoopFlingBtn.Font = Enum.Font.GothamBold
+LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
+LoopFlingBtn.TextColor3 = P.text
+LoopFlingBtn.TextSize = 12
+LoopFlingBtn.AutoButtonColor = false
+mkCorner(LoopFlingBtn, 5)
+
 OrbitBtn.Parent = Main
 OrbitBtn.BackgroundColor3 = P.row
 OrbitBtn.BorderSizePixel = 0
@@ -405,6 +417,7 @@ end
 local clickMode = nil -- nil | "place" | "player"
 local selectedPlayer = nil
 local flinging = false
+local loopFlinging = false
 
 local function cancelClickMode()
 	clickMode = nil
@@ -540,6 +553,47 @@ FlingBtn.MouseButton1Click:Connect(function()
 		PlayerHL.Parent = nil
 		FlingBtn.BackgroundColor3 = P.red
 	end)
+end)
+
+LoopFlingBtn.MouseButton1Click:Connect(function()
+	if not loopFlinging then
+		-- Start loop fling
+		if not selectedPlayer or not selectedPlayer.Character then
+			PlayerLabel.Text = "⚠  No player selected!"
+			PlayerLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+			return
+		end
+		loopFlinging = true
+		LoopFlingBtn.Text = "🔁  Loop Fling  |  On"
+		LoopFlingBtn.BackgroundColor3 = P.orange
+		spawn(function()
+			while loopFlinging do
+				RunService.RenderStepped:Wait()
+				local char = selectedPlayer and selectedPlayer.Character
+				if not char then
+					break
+				end
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if not hrp then
+					break
+				end
+				for _, data in ipairs(orbitParts) do
+					if data.anchor and data.anchor.Parent then
+						data.anchor.CFrame = CFrame.new(hrp.Position)
+					end
+				end
+			end
+			-- Cleanup when stopped
+			loopFlinging = false
+			LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
+			LoopFlingBtn.BackgroundColor3 = P.red
+		end)
+	else
+		-- Stop loop fling
+		loopFlinging = false
+		LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
+		LoopFlingBtn.BackgroundColor3 = P.red
+	end
 end)
 
 local Folder = Instance.new("Folder", Workspace)
@@ -914,8 +968,8 @@ local function toggleOrbit()
 			while blackHoleActive do
 				local dt = RunService.RenderStepped:Wait()
 				t = t + dt * Config.ORBIT_SPEED * (2 * math.pi)
-				-- If actively flinging, the fling loop controls anchors — skip orbit update
-				if flinging then
+				-- If actively flinging or loop-flinging, the fling loop controls anchors — skip orbit update
+				if flinging or loopFlinging then
 					continue
 				end
 				local ok, center = pcall(getOrbitCenter)
@@ -940,6 +994,9 @@ local function toggleOrbit()
 	else
 		OrbitBtn.Text = "Orbit  |  Off"
 		OrbitBtn.BackgroundColor3 = P.row
+		loopFlinging = false
+		LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
+		LoopFlingBtn.BackgroundColor3 = P.red
 		if DescendantAddedConnection then
 			DescendantAddedConnection:Disconnect()
 			DescendantAddedConnection = nil
