@@ -14,6 +14,8 @@ local SettingsLayout = Instance.new("UIListLayout")
 local TargetContent = Instance.new("Frame")
 local OrbitBtn = Instance.new("TextButton")
 local LoopFlingBtn = Instance.new("TextButton")
+-- Dropdown overlay (parented to Main so it escapes ContentFrame clipping)
+local DropdownList = Instance.new("ScrollingFrame")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,7 +24,6 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local IslandModel = nil
-
 if workspace:FindFirstChild("Island") == nil then
 	IslandModel = Instance.new("Model", workspace)
 else
@@ -84,7 +85,15 @@ local SETTING_DEFS = {
 		fmt = "%.1f",
 		desc = "Vertical bob speed",
 	},
-	{ label = "Helix H", key = "HELIX_SPAN", min = 2, max = 80, step = 2, fmt = "%.0f", desc = "Helix vertical range" },
+	{
+		label = "Helix H",
+		key = "HELIX_SPAN",
+		min = 2,
+		max = 80,
+		step = 2,
+		fmt = "%.0f",
+		desc = "Helix vertical range",
+	},
 }
 
 local P = {
@@ -104,12 +113,20 @@ local P = {
 	red = Color3.fromRGB(170, 40, 40),
 	orange = Color3.fromRGB(180, 100, 20),
 	active = Color3.fromRGB(180, 130, 20),
+	ddBg = Color3.fromRGB(28, 28, 34),
 }
 
-local CONTENT_H = 262
+-- Layout constants
+-- Target tab items stack to y=258+26=284; add 6px padding → 290
+local CONTENT_H = 290
 local ITEM_H = 30
 local SET_ROW_H = 34
+-- ContentFrame: y=62, h=CONTENT_H → ends at 62+290=352
+-- OrbitBtn: y=352+6=358, h=28 → ends 386; Main height=386+7=393
+local ORBIT_Y = 358
+local MAIN_H = 393
 
+-- ── Helpers ──────────────────────────────────────────────────────────────────
 local function mkCorner(inst, r)
 	local c = Instance.new("UICorner", inst)
 	c.CornerRadius = UDim.new(0, r or 6)
@@ -155,6 +172,7 @@ local function mkSep(parent, yPos)
 	return s
 end
 
+-- ── Main window ───────────────────────────────────────────────────────────────
 Gui.Name = "OrbitGUI"
 Gui.Parent = gethui()
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -163,7 +181,7 @@ Main.Parent = Gui
 Main.BackgroundColor3 = P.bg
 Main.BorderSizePixel = 0
 Main.Position = UDim2.new(0.04, 0, 0.18, 0)
-Main.Size = UDim2.new(0, 225, 0, 365)
+Main.Size = UDim2.new(0, 225, 0, MAIN_H)
 Main.Active = true
 Main.Draggable = true
 mkCorner(Main, 10)
@@ -209,6 +227,7 @@ ContentFrame.Position = UDim2.new(0, 0, 0, 62)
 ContentFrame.Size = UDim2.new(1, 0, 0, CONTENT_H)
 ContentFrame.ClipsDescendants = true
 
+-- ── Shapes tab ────────────────────────────────────────────────────────────────
 ShapesContent.Parent = ContentFrame
 ShapesContent.BackgroundTransparency = 1
 ShapesContent.BorderSizePixel = 0
@@ -228,6 +247,7 @@ ShapesPadding.PaddingBottom = UDim.new(0, 4)
 ShapesPadding.PaddingLeft = UDim.new(0, 5)
 ShapesPadding.PaddingRight = UDim.new(0, 5)
 
+-- ── Settings tab ──────────────────────────────────────────────────────────────
 SettingsContent.Parent = ContentFrame
 SettingsContent.BackgroundTransparency = 1
 SettingsContent.BorderSizePixel = 0
@@ -243,6 +263,7 @@ stgPad.PaddingTop = UDim.new(0, 5)
 stgPad.PaddingLeft = UDim.new(0, 6)
 stgPad.PaddingRight = UDim.new(0, 6)
 
+-- ── Target tab ────────────────────────────────────────────────────────────────
 TargetContent.Parent = ContentFrame
 TargetContent.BackgroundTransparency = 1
 TargetContent.BorderSizePixel = 0
@@ -296,6 +317,7 @@ local PL_Header = mkLabel(
 PL_Header.Font = Enum.Font.GothamBold
 PL_Header.TextColor3 = Color3.fromRGB(255, 140, 140)
 
+-- Status row showing who is selected
 local PlayerLabel = mkLabel(
 	TargetContent,
 	"No player selected",
@@ -310,7 +332,9 @@ mkCorner(PlayerLabel, 4)
 local plPad = Instance.new("UIPadding", PlayerLabel)
 plPad.PaddingLeft = UDim.new(0, 5)
 
-local ClickPlayerBtn = mkBtn(TargetContent, "👤  Click a Player", UDim2.new(0, 8, 0, 168), UDim2.new(1, -16, 0, 26))
+-- Dropdown button (replaces "Click a Player" button)
+local DropdownBtn = mkBtn(TargetContent, "▾  Select Player", UDim2.new(0, 8, 0, 168), UDim2.new(1, -16, 0, 26))
+
 local FlingBtn = mkBtn(TargetContent, "💥  Fling!", UDim2.new(0, 8, 0, 198), UDim2.new(1, -16, 0, 26), P.red)
 
 LoopFlingBtn.Parent = TargetContent
@@ -325,10 +349,32 @@ LoopFlingBtn.TextSize = 12
 LoopFlingBtn.AutoButtonColor = false
 mkCorner(LoopFlingBtn, 5)
 
+-- Spectate button
+local SpectateBtn = mkBtn(TargetContent, "👁  Spectate", UDim2.new(0, 8, 0, 258), UDim2.new(1, -16, 0, 26))
+
+-- ── Dropdown overlay (parented to Main, above ContentFrame clip) ──────────────
+-- It appears right below the DropdownBtn in screen space.
+-- DropdownBtn is at TargetContent y=168; ContentFrame starts at Main y=62
+-- So in Main coords: dropdown top = 62 + 168 + 26 = 256
+local DD_MAX_H = 110 -- max visible height before scrolling
+DropdownList.Parent = Main
+DropdownList.BackgroundColor3 = P.ddBg
+DropdownList.BorderSizePixel = 0
+DropdownList.Position = UDim2.new(0, 8, 0, 256)
+DropdownList.Size = UDim2.new(1, -16, 0, DD_MAX_H)
+DropdownList.ScrollBarThickness = 4
+DropdownList.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 150)
+DropdownList.ScrollingDirection = Enum.ScrollingDirection.Y
+DropdownList.CanvasSize = UDim2.new(0, 0, 0, 0)
+DropdownList.Visible = false
+DropdownList.ZIndex = 20
+mkCorner(DropdownList, 5)
+
+-- ── Orbit toggle button (fixed below content, parent = Main) ─────────────────
 OrbitBtn.Parent = Main
 OrbitBtn.BackgroundColor3 = P.row
 OrbitBtn.BorderSizePixel = 0
-OrbitBtn.Position = UDim2.new(0.05, 0, 0, 330)
+OrbitBtn.Position = UDim2.new(0.05, 0, 0, ORBIT_Y)
 OrbitBtn.Size = UDim2.new(0.90, 0, 0, 28)
 OrbitBtn.Font = Enum.Font.GothamBold
 OrbitBtn.Text = "Orbit  |  Off"
@@ -337,10 +383,13 @@ OrbitBtn.TextSize = 13
 OrbitBtn.AutoButtonColor = false
 mkCorner(OrbitBtn, 6)
 
+-- ── Tab switching ─────────────────────────────────────────────────────────────
 local tabBtns = { TabShapes, TabSettings, TabTarget }
 local tabPanels = { ShapesContent, SettingsContent, TargetContent }
 
 local function switchTab(idx)
+	-- Always close dropdown when switching away from Target
+	DropdownList.Visible = false
 	for i = 1, 3 do
 		tabBtns[i].BackgroundColor3 = (i == idx) and P.tabOn or P.tabOff
 		tabBtns[i].TextColor3 = (i == idx) and P.text or P.sub
@@ -357,21 +406,16 @@ TabTarget.MouseButton1Click:Connect(function()
 	switchTab(3)
 end)
 
+-- ── Hide / show whole GUI ─────────────────────────────────────────────────────
 local mainVisible = true
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if input.KeyCode == Enum.KeyCode.RightControl and not gpe then
-		mainVisible = not mainVisible
-		Main.Visible = mainVisible
-	end
-end)
 
+-- ── World objects ─────────────────────────────────────────────────────────────
 local CenterPart = Instance.new("Part")
 CenterPart.Name = "_OrbitCenter"
 CenterPart.Size = Vector3.new(1, 1, 1)
 CenterPart.Anchored = true
 CenterPart.CanCollide = false
 CenterPart.CastShadow = false
-CenterPart.Transparency = 0.5
 CenterPart.Material = Enum.Material.Neon
 CenterPart.Color = Color3.fromRGB(59, 218, 10)
 CenterPart.Transparency = 1
@@ -386,19 +430,33 @@ CenterHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 CenterHL.Adornee = CenterPart
 CenterHL.Parent = CenterPart
 
--- World object: player highlight
 local PlayerHL = Instance.new("Highlight")
-PlayerHL.FillColor = Color3.fromRGB(59, 218, 10)
-PlayerHL.FillTransparency = 0.45
-PlayerHL.OutlineColor = Color3.fromRGB(59, 218, 10)
+PlayerHL.FillColor = Color3.fromRGB(80, 200, 255)
+PlayerHL.FillTransparency = 0.35
+PlayerHL.OutlineColor = Color3.fromRGB(80, 200, 255)
 PlayerHL.OutlineTransparency = 0
 PlayerHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 PlayerHL.Adornee = nil
 PlayerHL.Parent = nil
 
-local orbitMode = "island" -- "island" | "custom"
+-- ── State ─────────────────────────────────────────────────────────────────────
+local orbitMode = "island"
 local customCenter = Vector3.new(0, 0, 0)
+local clickMode = nil -- nil | "place"
+local selectedPlayer = nil
+local charAddedConn = nil -- tracks respawn for highlight
+local spectateConn = nil
+local flinging = false
+local loopFlinging = false
+local spectating = false
+-- Fly state
+local flyEnabled = false
+local flyKey = Enum.KeyCode.F
+local flySpeed = 50
+local rebindingFly = false
+local flyBV, flyBG, flyConn
 
+-- ── Helpers ───────────────────────────────────────────────────────────────────
 local function getOrbitCenter()
 	if orbitMode == "island" then
 		local ok, cf = pcall(function()
@@ -414,77 +472,163 @@ local function setModeLabel(txt)
 	ModeLabel.Text = "Mode:  " .. txt
 end
 
-local clickMode = nil -- nil | "place" | "player"
-local selectedPlayer = nil
-local flinging = false
-local loopFlinging = false
-
 local function cancelClickMode()
 	clickMode = nil
 	PlaceBtn.BackgroundColor3 = P.row
-	ClickPlayerBtn.BackgroundColor3 = P.row
 	PlaceBtn.Text = "🖱  Click to Place Center"
-	ClickPlayerBtn.Text = "👤  Click a Player"
 end
 
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if gpe then
-		return
+-- ── Player selection helpers ──────────────────────────────────────────────────
+local function clearSelectedPlayer()
+	selectedPlayer = nil
+	if charAddedConn then
+		charAddedConn:Disconnect()
+		charAddedConn = nil
 	end
-
-	if input.KeyCode == Enum.KeyCode.Escape then
-		cancelClickMode()
-		return
+	if spectateConn then
+		spectateConn:Disconnect()
+		spectateConn = nil
 	end
-
-	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-		return
+	PlayerHL.Parent = nil
+	PlayerLabel.Text = "No player selected"
+	PlayerLabel.TextColor3 = P.sub
+	DropdownBtn.Text = "▾  Select Player"
+	-- Stop dependent modes
+	if spectating then
+		spectating = false
+		SpectateBtn.Text = "👁  Spectate"
+		SpectateBtn.BackgroundColor3 = P.row
+		pcall(function()
+			local myHum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+			if myHum then
+				Workspace.CurrentCamera.CameraSubject = myHum
+			end
+		end)
 	end
-	if clickMode == nil then
-		return
+	loopFlinging = false
+	LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
+	LoopFlingBtn.BackgroundColor3 = P.red
+end
+
+local function applyHighlight(char)
+	if char then
+		PlayerHL.Parent = char
 	end
+end
 
-	local camera = Workspace.CurrentCamera
-	local mPos = UserInputService:GetMouseLocation()
-	local unitRay = camera:ViewportPointToRay(mPos.X, mPos.Y)
-
-	local exclude = { CenterPart, Folder }
-	if LocalPlayer.Character then
-		table.insert(exclude, LocalPlayer.Character)
+local function selectPlayer(p)
+	-- Detach from previous
+	if charAddedConn then
+		charAddedConn:Disconnect()
+		charAddedConn = nil
 	end
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = exclude
-
-	local hit = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, params)
-
-	if clickMode == "place" then
-		if hit then
-			-- Place 1 stud above the surface
-			customCenter = hit.Position --+ Vector3.new(0, 1, 0)
-			orbitMode = "custom"
-			CenterPart.CFrame = CFrame.new(customCenter)
-			CenterPart.Transparency = 0
-			setModeLabel("Custom Point")
-		end
-		cancelClickMode()
-	elseif clickMode == "player" then
-		if hit and hit.Instance then
-			for _, p in pairs(Players:GetPlayers()) do
-				if p ~= LocalPlayer and p.Character and hit.Instance:IsDescendantOf(p.Character) then
-					selectedPlayer = p
-					PlayerHL.Parent = p.Character
-					PlayerLabel.Text = "Target:  " .. p.Name
-					PlayerLabel.TextColor3 = Color3.fromRGB(255, 160, 160)
-					break
-				end
+	if spectateConn then
+		spectateConn:Disconnect()
+		spectateConn = nil
+	end
+	selectedPlayer = p
+	DropdownBtn.Text = "▾  " .. p.Name
+	PlayerLabel.Text = "Target:  " .. p.Name
+	PlayerLabel.TextColor3 = Color3.fromRGB(255, 160, 160)
+	-- Highlight current character
+	applyHighlight(p.Character)
+	-- Re-apply on respawn
+	charAddedConn = p.CharacterAdded:Connect(function(char)
+		task.wait(0.1)
+		applyHighlight(char)
+		-- Re-attach spectate camera on respawn
+		if spectating then
+			task.wait(0.2)
+			local hum = char:FindFirstChildWhichIsA("Humanoid")
+			if hum and spectating then
+				Workspace.CurrentCamera.CameraSubject = hum
 			end
 		end
-		cancelClickMode()
+	end)
+end
+
+-- Remove selection if player leaves
+Players.PlayerRemoving:Connect(function(p)
+	if selectedPlayer == p then
+		clearSelectedPlayer()
 	end
 end)
 
+-- ── Dropdown logic ────────────────────────────────────────────────────────────
+local dropdownOpen = false
+local DD_ITEM_H = 24
+
+local function closeDropdown()
+	dropdownOpen = false
+	DropdownList.Visible = false
+end
+
+local function populateAndOpenDropdown()
+	-- Rebuild list
+	for _, c in pairs(DropdownList:GetChildren()) do
+		if c:IsA("TextButton") then
+			c:Destroy()
+		end
+	end
+
+	local entries = {}
+	table.insert(entries, { label = "  ✕  No one", player = nil })
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			table.insert(entries, { label = "  " .. p.Name, player = p })
+		end
+	end
+
+	for i, entry in ipairs(entries) do
+		local row = Instance.new("TextButton", DropdownList)
+		row.Size = UDim2.new(1, 0, 0, DD_ITEM_H)
+		row.Position = UDim2.new(0, 0, 0, (i - 1) * DD_ITEM_H)
+		row.BackgroundColor3 = (selectedPlayer == entry.player) and P.sel or P.row
+		row.BorderSizePixel = 0
+		row.Font = Enum.Font.Gotham
+		row.TextSize = 12
+		row.TextColor3 = P.text
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.Text = entry.label
+		row.AutoButtonColor = false
+		row.ZIndex = 21
+		mkCorner(row, 4)
+		row.MouseEnter:Connect(function()
+			if selectedPlayer ~= entry.player then
+				row.BackgroundColor3 = P.rowHov
+			end
+		end)
+		row.MouseLeave:Connect(function()
+			row.BackgroundColor3 = (selectedPlayer == entry.player) and P.sel or P.row
+		end)
+		row.MouseButton1Click:Connect(function()
+			closeDropdown()
+			if entry.player == nil then
+				clearSelectedPlayer()
+			else
+				selectPlayer(entry.player)
+			end
+		end)
+	end
+
+	local totalH = #entries * DD_ITEM_H
+	DropdownList.CanvasSize = UDim2.new(0, 0, 0, totalH)
+	-- Shrink list height if fewer entries than max
+	local clampH = math.min(totalH, DD_MAX_H)
+	DropdownList.Size = UDim2.new(1, -16, 0, clampH)
+	dropdownOpen = true
+	DropdownList.Visible = true
+end
+
+DropdownBtn.MouseButton1Click:Connect(function()
+	if dropdownOpen then
+		closeDropdown()
+	else
+		populateAndOpenDropdown()
+	end
+end)
+
+-- ── Orbit center controls ─────────────────────────────────────────────────────
 PlaceBtn.MouseButton1Click:Connect(function()
 	if clickMode == "place" then
 		cancelClickMode()
@@ -503,17 +647,7 @@ IslandBtn.MouseButton1Click:Connect(function()
 	cancelClickMode()
 end)
 
-ClickPlayerBtn.MouseButton1Click:Connect(function()
-	if clickMode == "player" then
-		cancelClickMode()
-	else
-		cancelClickMode()
-		clickMode = "player"
-		ClickPlayerBtn.BackgroundColor3 = P.active
-		ClickPlayerBtn.Text = "👤  Click a player in world..."
-	end
-end)
-
+-- ── Fling buttons ─────────────────────────────────────────────────────────────
 FlingBtn.MouseButton1Click:Connect(function()
 	if flinging then
 		return
@@ -526,7 +660,6 @@ FlingBtn.MouseButton1Click:Connect(function()
 	flinging = true
 	FlingBtn.Text = "💥  Flinging..."
 	FlingBtn.BackgroundColor3 = P.orange
-
 	spawn(function()
 		local t0 = tick()
 		while tick() - t0 < 3 do
@@ -539,7 +672,6 @@ FlingBtn.MouseButton1Click:Connect(function()
 			if not hrp then
 				break
 			end
-			-- Collapse all anchors directly onto the player
 			for _, data in ipairs(orbitParts) do
 				if data.anchor and data.anchor.Parent then
 					data.anchor.CFrame = CFrame.new(hrp.Position)
@@ -548,16 +680,12 @@ FlingBtn.MouseButton1Click:Connect(function()
 		end
 		flinging = false
 		FlingBtn.Text = "💥  Fling!"
-		PlayerLabel.Text = "⚠  No player selected!"
-		PlayerLabel.TextColor3 = P.sub
-		PlayerHL.Parent = nil
 		FlingBtn.BackgroundColor3 = P.red
 	end)
 end)
 
 LoopFlingBtn.MouseButton1Click:Connect(function()
 	if not loopFlinging then
-		-- Start loop fling
 		if not selectedPlayer or not selectedPlayer.Character then
 			PlayerLabel.Text = "⚠  No player selected!"
 			PlayerLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
@@ -583,19 +711,213 @@ LoopFlingBtn.MouseButton1Click:Connect(function()
 					end
 				end
 			end
-			-- Cleanup when stopped
 			loopFlinging = false
 			LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
 			LoopFlingBtn.BackgroundColor3 = P.red
 		end)
 	else
-		-- Stop loop fling
 		loopFlinging = false
 		LoopFlingBtn.Text = "🔁  Loop Fling  |  Off"
 		LoopFlingBtn.BackgroundColor3 = P.red
 	end
 end)
 
+-- ── Spectate ──────────────────────────────────────────────────────────────────
+SpectateBtn.MouseButton1Click:Connect(function()
+	if not spectating then
+		if not selectedPlayer then
+			PlayerLabel.Text = "⚠  No player selected!"
+			PlayerLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+			return
+		end
+		spectating = true
+		SpectateBtn.Text = "👁  Unspectate"
+		SpectateBtn.BackgroundColor3 = P.active
+		local char = selectedPlayer.Character
+		if char then
+			local hum = char:FindFirstChildWhichIsA("Humanoid")
+			if hum then
+				Workspace.CurrentCamera.CameraSubject = hum
+			end
+		end
+	else
+		spectating = false
+		SpectateBtn.Text = "👁  Spectate"
+		SpectateBtn.BackgroundColor3 = P.row
+		pcall(function()
+			local myHum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+			if myHum then
+				Workspace.CurrentCamera.CameraSubject = myHum
+			end
+		end)
+	end
+end)
+
+-- ── Fly system ────────────────────────────────────────────────────────────────
+local function stopFly()
+	flyEnabled = false
+	if flyBV and flyBV.Parent then
+		flyBV:Destroy()
+	end
+	if flyBG and flyBG.Parent then
+		flyBG:Destroy()
+	end
+	if flyConn then
+		flyConn:Disconnect()
+		flyConn = nil
+	end
+	flyBV, flyBG = nil, nil
+	pcall(function()
+		local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+		if hum then
+			hum.PlatformStand = false
+		end
+	end)
+end
+
+local function startFly()
+	local char = LocalPlayer.Character
+	if not char then
+		return
+	end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return
+	end
+	local hum = char:FindFirstChildWhichIsA("Humanoid")
+	if hum then
+		hum.PlatformStand = true
+	end
+
+	flyBV = Instance.new("BodyVelocity")
+	flyBV.Velocity = Vector3.new(0, 0, 0)
+	flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	flyBV.P = 1e4
+	flyBV.Parent = hrp
+
+	flyBG = Instance.new("BodyGyro")
+	flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	flyBG.P = 1e6
+	flyBG.D = 100
+	flyBG.CFrame = hrp.CFrame
+	flyBG.Parent = hrp
+
+	flyEnabled = true
+
+	flyConn = RunService.RenderStepped:Connect(function()
+		if not flyEnabled then
+			return
+		end
+		local cam = Workspace.CurrentCamera
+		local dir = Vector3.new(0, 0, 0)
+		local spd = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and flySpeed * 2 or flySpeed
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			dir = dir + cam.CFrame.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			dir = dir - cam.CFrame.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+			dir = dir - cam.CFrame.RightVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+			dir = dir + cam.CFrame.RightVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			dir = dir + Vector3.new(0, 1, 0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+			dir = dir - Vector3.new(0, 1, 0)
+		end
+		if dir.Magnitude > 0 then
+			dir = dir.Unit
+		end
+		flyBV.Velocity = dir * spd
+		flyBG.CFrame = cam.CFrame
+	end)
+end
+
+local FlyBtn -- forward-declared; created in Settings section below
+local KeybindBtn
+
+-- ── Input handler (mouse clicks + fly keybind + GUI hide) ────────────────────
+UserInputService.InputBegan:Connect(function(input, gpe)
+	-- GUI visibility toggle (never eaten by game)
+	if input.KeyCode == Enum.KeyCode.RightControl then
+		mainVisible = not mainVisible
+		Main.Visible = mainVisible
+		return
+	end
+
+	if gpe then
+		return
+	end
+
+	-- Rebind capture
+	if rebindingFly then
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			flyKey = input.KeyCode
+			rebindingFly = false
+			KeybindBtn.Text = "⌨  Key: " .. tostring(flyKey.Name)
+			KeybindBtn.BackgroundColor3 = P.row
+		end
+		return
+	end
+
+	-- Fly keybind toggle
+	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == flyKey then
+		if flyEnabled then
+			stopFly()
+			if FlyBtn then
+				FlyBtn.Text = "✈  Fly  |  Off"
+				FlyBtn.BackgroundColor3 = P.row
+			end
+		else
+			startFly()
+			if FlyBtn then
+				FlyBtn.Text = "✈  Fly  |  On"
+				FlyBtn.BackgroundColor3 = P.green
+			end
+		end
+		return
+	end
+
+	-- Escape: cancel click modes / close dropdown
+	if input.KeyCode == Enum.KeyCode.Escape then
+		cancelClickMode()
+		closeDropdown()
+		return
+	end
+
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+
+	-- World raycasting for place mode
+	if clickMode == "place" then
+		local camera = Workspace.CurrentCamera
+		local mPos = UserInputService:GetMouseLocation()
+		local unitRay = camera:ViewportPointToRay(mPos.X, mPos.Y)
+		local exclude = { CenterPart, Folder }
+		if LocalPlayer.Character then
+			table.insert(exclude, LocalPlayer.Character)
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = exclude
+		local hit = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, params)
+		if hit then
+			customCenter = hit.Position
+			orbitMode = "custom"
+			CenterPart.CFrame = CFrame.new(customCenter)
+			CenterPart.Transparency = 0
+			setModeLabel("Custom Point")
+		end
+		cancelClickMode()
+	end
+end)
+
+-- ── Network / physics harness ─────────────────────────────────────────────────
 local Folder = Instance.new("Folder", Workspace)
 
 if not getgenv().Network then
@@ -624,14 +946,14 @@ if not getgenv().Network then
 	EnablePartControl()
 end
 
+-- ── Shape math ────────────────────────────────────────────────────────────────
 local function polygonPoint(a, R, n)
 	local s = (2 * math.pi) / n
 	local t = (a % s) - s / 2
 	if math.abs(math.cos(t)) < 1e-6 then
 		t = t + 1e-6
 	end
-	local r = R * math.cos(s / 2) / math.cos(t)
-	return math.cos(a) * r, math.sin(a) * r
+	return math.cos(a) * (R * math.cos(s / 2) / math.cos(t)), math.sin(a) * (R * math.cos(s / 2) / math.cos(t))
 end
 local function starPoint(a, oR, iR, np)
 	local step = math.pi / (np or 5)
@@ -784,6 +1106,7 @@ local function buildShapeList()
 	ShapesContent.CanvasSize = UDim2.new(0, 0, 0, #SHAPES * ITEM_H + (#SHAPES - 1) * 3 + 8)
 end
 
+-- ── Settings sliders ──────────────────────────────────────────────────────────
 local activeDrag = nil
 
 local function applyFrac(frac, def, fill, thumb, valLbl)
@@ -856,14 +1179,120 @@ local function buildSettingsSliders()
 		track.InputBegan:Connect(function(inp)
 			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
 				activeDrag = { def = def, fill = fill, thumb = thumb, valLbl = vl, track = track }
-				local f = (inp.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X
-				applyFrac(f, def, fill, thumb, vl)
+				applyFrac((inp.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, def, fill, thumb, vl)
 			end
 		end)
 		thumb.MouseButton1Down:Connect(function()
 			activeDrag = { def = def, fill = fill, thumb = thumb, valLbl = vl, track = track }
 		end)
 	end
+
+	-- ── Fly section (appended to Settings tab after sliders) ──────────────────
+	local flySepRow = Instance.new("Frame", SettingsContent)
+	flySepRow.LayoutOrder = 100
+	flySepRow.Size = UDim2.new(1, 0, 0, 14)
+	flySepRow.BackgroundTransparency = 1
+	flySepRow.BorderSizePixel = 0
+	local flySep = Instance.new("Frame", flySepRow)
+	flySep.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+	flySep.BorderSizePixel = 0
+	flySep.Position = UDim2.new(0, 0, 0.5, 0)
+	flySep.Size = UDim2.new(1, 0, 0, 1)
+	local flyHdrLbl = Instance.new("TextLabel", flySepRow)
+	flyHdrLbl.BackgroundTransparency = 1
+	flyHdrLbl.Position = UDim2.new(0, 0, 0, 0)
+	flyHdrLbl.Size = UDim2.new(1, 0, 1, 0)
+	flyHdrLbl.Font = Enum.Font.GothamBold
+	flyHdrLbl.TextSize = 11
+	flyHdrLbl.TextColor3 = P.thumb
+	flyHdrLbl.Text = "✈  Fly"
+	flyHdrLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	-- Fly toggle button
+	local flyRow = Instance.new("Frame", SettingsContent)
+	flyRow.LayoutOrder = 101
+	flyRow.Size = UDim2.new(1, 0, 0, SET_ROW_H - 4)
+	flyRow.BackgroundColor3 = P.row
+	flyRow.BorderSizePixel = 0
+	mkCorner(flyRow, 5)
+	FlyBtn = Instance.new("TextButton", flyRow)
+	FlyBtn.BackgroundTransparency = 1
+	FlyBtn.Size = UDim2.new(1, 0, 1, 0)
+	FlyBtn.Font = Enum.Font.GothamSemibold
+	FlyBtn.TextSize = 12
+	FlyBtn.TextColor3 = P.text
+	FlyBtn.Text = "✈  Fly  |  Off"
+	FlyBtn.AutoButtonColor = false
+	FlyBtn.MouseButton1Click:Connect(function()
+		if flyEnabled then
+			stopFly()
+			FlyBtn.Text = "✈  Fly  |  Off"
+			FlyBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			FlyBtn.BackgroundTransparency = 1
+		else
+			startFly()
+			FlyBtn.Text = "✈  Fly  |  On"
+			FlyBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			FlyBtn.BackgroundTransparency = 1
+		end
+	end)
+
+	-- Keybind row
+	local kbRow = Instance.new("Frame", SettingsContent)
+	kbRow.LayoutOrder = 102
+	kbRow.Size = UDim2.new(1, 0, 0, SET_ROW_H)
+	kbRow.BackgroundColor3 = P.row
+	kbRow.BorderSizePixel = 0
+	mkCorner(kbRow, 5)
+	local kbPad = Instance.new("UIPadding", kbRow)
+	kbPad.PaddingLeft = UDim.new(0, 8)
+	kbPad.PaddingRight = UDim.new(0, 8)
+	kbPad.PaddingTop = UDim.new(0, 4)
+
+	local kbLabel = Instance.new("TextLabel", kbRow)
+	kbLabel.BackgroundTransparency = 1
+	kbLabel.Position = UDim2.new(0, 0, 0, 0)
+	kbLabel.Size = UDim2.new(0.45, 0, 0, 14)
+	kbLabel.Font = Enum.Font.GothamSemibold
+	kbLabel.TextSize = 11
+	kbLabel.TextColor3 = P.sub
+	kbLabel.Text = "Fly Keybind"
+	kbLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+	KeybindBtn = Instance.new("TextButton", kbRow)
+	KeybindBtn.BackgroundColor3 = P.panel
+	KeybindBtn.BorderSizePixel = 0
+	KeybindBtn.Position = UDim2.new(0.45, 0, 0, 0)
+	KeybindBtn.Size = UDim2.new(0.55, 0, 0, 22)
+	KeybindBtn.Font = Enum.Font.GothamBold
+	KeybindBtn.TextSize = 11
+	KeybindBtn.TextColor3 = P.thumb
+	KeybindBtn.Text = "⌨  Key: F"
+	KeybindBtn.AutoButtonColor = false
+	mkCorner(KeybindBtn, 4)
+	KeybindBtn.MouseButton1Click:Connect(function()
+		if rebindingFly then
+			-- Cancel rebind
+			rebindingFly = false
+			KeybindBtn.Text = "⌨  Key: " .. tostring(flyKey.Name)
+			KeybindBtn.BackgroundColor3 = P.panel
+		else
+			rebindingFly = true
+			KeybindBtn.Text = "⌨  Press any key..."
+			KeybindBtn.BackgroundColor3 = P.active
+		end
+	end)
+
+	-- Fly speed label hint
+	local spd = Instance.new("TextLabel", kbRow)
+	spd.BackgroundTransparency = 1
+	spd.Position = UDim2.new(0, 0, 0, 18)
+	spd.Size = UDim2.new(1, 0, 0, 12)
+	spd.Font = Enum.Font.Gotham
+	spd.TextSize = 10
+	spd.TextColor3 = P.sub
+	spd.Text = "WASD + Space/LCtrl to move  •  Shift = fast"
+	spd.TextXAlignment = Enum.TextXAlignment.Left
 end
 
 UserInputService.InputChanged:Connect(function(inp)
@@ -884,6 +1313,7 @@ UserInputService.InputEnded:Connect(function(inp)
 	end
 end)
 
+-- ── Orbit engine ──────────────────────────────────────────────────────────────
 orbitParts = {}
 
 local function ForcePart(v)
@@ -901,14 +1331,11 @@ local function ForcePart(v)
 				x:Destroy()
 			end
 		end
-		if v:FindFirstChild("Attachment") then
-			v:FindFirstChild("Attachment"):Destroy()
-		end
-		if v:FindFirstChild("AlignPosition") then
-			v:FindFirstChild("AlignPosition"):Destroy()
-		end
-		if v:FindFirstChild("Torque") then
-			v:FindFirstChild("Torque"):Destroy()
+		for _, n in ipairs({ "Attachment", "AlignPosition", "Torque" }) do
+			local c = v:FindFirstChild(n)
+			if c then
+				c:Destroy()
+			end
 		end
 		v.CanCollide = false
 
@@ -921,11 +1348,9 @@ local function ForcePart(v)
 
 		local aAtt = Instance.new("Attachment", anchor)
 		local pAtt = Instance.new("Attachment", v)
-
 		local Tq = Instance.new("Torque", v)
 		Tq.Attachment0 = pAtt
 		Tq.Torque = Vector3.new(100000, 100000, 100000)
-
 		local AP = Instance.new("AlignPosition", v)
 		AP.MaxForce = math.huge
 		AP.MaxVelocity = math.huge
@@ -968,7 +1393,6 @@ local function toggleOrbit()
 			while blackHoleActive do
 				local dt = RunService.RenderStepped:Wait()
 				t = t + dt * Config.ORBIT_SPEED * (2 * math.pi)
-				-- If actively flinging or loop-flinging, the fling loop controls anchors — skip orbit update
 				if flinging or loopFlinging then
 					continue
 				end
