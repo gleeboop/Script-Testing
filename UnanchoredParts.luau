@@ -61,10 +61,10 @@ local P = {
 	thumb = Color3.fromRGB(100, 175, 255), -- thumb / value labels
 	text = Color3.fromRGB(235, 245, 255), -- primary text
 	sub = Color3.fromRGB(145, 165, 190), -- secondary / hint text
-	green = Color3.fromRGB(0, 70, 40), -- ON / safe
-	red = Color3.fromRGB(143, 42, 190), -- danger / fling
-	orange = Color3.fromRGB(218, 137, 255), -- warning / active fling
-	active = Color3.fromRGB(218, 137, 255), -- keybind-capture state
+	green = Color3.fromRGB(0, 165, 80), -- ON / safe
+	red = Color3.fromRGB(190, 42, 42), -- danger / fling
+	orange = Color3.fromRGB(200, 110, 10), -- warning / active fling
+	active = Color3.fromRGB(170, 125, 0), -- keybind-capture state
 	ddBg = Color3.fromRGB(10, 16, 28), -- dropdown list bg
 	disabled = Color3.fromRGB(28, 35, 48), -- disabled feature
 	section = Color3.fromRGB(0, 85, 175), -- section label bar
@@ -381,7 +381,7 @@ cfgSaveBtn.AutoButtonColor = false
 mkCorner(cfgSaveBtn, 5)
 
 local cfgLoadBtn = Instance.new("TextButton", actRow)
-cfgLoadBtn.BackgroundColor3 = P.sub
+cfgLoadBtn.BackgroundColor3 = P.panel
 cfgLoadBtn.BorderSizePixel = 0
 cfgLoadBtn.Position = UDim2.new(0.33, 2, 0, 0)
 cfgLoadBtn.Size = UDim2.new(0.34, -2, 1, 0)
@@ -736,7 +736,7 @@ mkStroke(ModeLabel, P.border, 1, 0.6)
 local mlPad = Instance.new("UIPadding", ModeLabel)
 mlPad.PaddingLeft = UDim.new(0, 6)
 local PlaceBtn = mkScrollBtn(TargetContent, "Click to Place Center", 3)
-local IslandBtn = mkScrollBtn(TargetContent, "Reset to Island", 4, P.green)
+local IslandBtn = mkScrollBtn(TargetContent, "Reset to Island", 4, Color3.fromRGB(0, 70, 40))
 
 mkSectionRow(TargetContent, "Player Fling", 5)
 local PlayerLabel = Instance.new("TextLabel", TargetContent)
@@ -1537,9 +1537,9 @@ end)
 local function cancelClickMode()
 	clickMode = nil
 	PlaceBtn.BackgroundColor3 = P.row
-	PlaceBtn.Text = " Click to Place Center"
+	PlaceBtn.Text = "Click to Place Center"
 	ClickPlayerBtn.BackgroundColor3 = P.row
-	ClickPlayerBtn.Text = " Click"
+	ClickPlayerBtn.Text = "Click"
 end
 
 PlaceBtn.MouseButton1Click:Connect(function()
@@ -1549,7 +1549,7 @@ PlaceBtn.MouseButton1Click:Connect(function()
 		cancelClickMode()
 		clickMode = "place"
 		PlaceBtn.BackgroundColor3 = P.active
-		PlaceBtn.Text = " Placing..."
+		PlaceBtn.Text = "Placing..."
 	end
 end)
 IslandBtn.MouseButton1Click:Connect(function()
@@ -1575,11 +1575,11 @@ FlingBtn.MouseButton1Click:Connect(function()
 	end
 	if not selectedPlayer or not selectedPlayer.Character then
 		PlayerLabel.Text = "⚠  No player selected!"
-		PlayerLabel.TextColor3 = p.red
+		PlayerLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
 		return
 	end
 	flinging = true
-	FlingBtn.Text = " Flinging..."
+	FlingBtn.Text = "Flinging..."
 	FlingBtn.BackgroundColor3 = P.orange
 	spawn(function()
 		local t0 = tick()
@@ -1612,7 +1612,7 @@ LoopFlingBtn.MouseButton1Click:Connect(function()
 			return
 		end
 		loopFlinging = true
-		LoopFlingBtn.Text = " Loop Fling  |  On"
+		LoopFlingBtn.Text = "Loop Fling  |  On"
 		LoopFlingBtn.BackgroundColor3 = P.orange
 		spawn(function()
 			while loopFlinging do
@@ -1632,12 +1632,12 @@ LoopFlingBtn.MouseButton1Click:Connect(function()
 				end
 			end
 			loopFlinging = false
-			LoopFlingBtn.Text = " Loop Fling  |  Off"
+			LoopFlingBtn.Text = "Loop Fling  |  Off"
 			LoopFlingBtn.BackgroundColor3 = P.red
 		end)
 	else
 		loopFlinging = false
-		LoopFlingBtn.Text = " Loop Fling  |  Off"
+		LoopFlingBtn.Text = "Loop Fling  |  Off"
 		LoopFlingBtn.BackgroundColor3 = P.red
 	end
 end)
@@ -1649,7 +1649,7 @@ SpectateBtn.MouseButton1Click:Connect(function()
 			return
 		end
 		spectating = true
-		SpectateBtn.Text = " Unspectate"
+		SpectateBtn.Text = "Unspectate"
 		SpectateBtn.BackgroundColor3 = P.active
 		local char = selectedPlayer.Character
 		if char then
@@ -1660,7 +1660,7 @@ SpectateBtn.MouseButton1Click:Connect(function()
 		end
 	else
 		spectating = false
-		SpectateBtn.Text = " Spectate"
+		SpectateBtn.Text = "Spectate"
 		SpectateBtn.BackgroundColor3 = P.row
 		pcall(function()
 			local h = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
@@ -1931,7 +1931,7 @@ local function buildShapeList()
 		btn.TextSize = 12
 		btn.TextColor3 = P.text
 		btn.TextXAlignment = Enum.TextXAlignment.Left
-		btn.Text = "  " .. shape.icon .. "  " .. shape.name
+		btn.Text = " " .. shape.icon .. "  " .. shape.name
 		btn.AutoButtonColor = false
 		mkCorner(btn, 5)
 		btn.MouseEnter:Connect(function()
