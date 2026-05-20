@@ -63,8 +63,8 @@ local P = {
 	sub = Color3.fromRGB(145, 165, 190), -- secondary / hint text
 	green = Color3.fromRGB(0, 70, 40), -- ON / safe
 	red = Color3.fromRGB(143, 42, 190), -- danger / fling
-	orange = Color3.fromRGB(75, 17, 102), -- warning / active fling
-	active = Color3.fromRGB(143, 42, 190), -- keybind-capture state
+	orange = Color3.fromRGB(218, 137, 255), -- warning / active fling
+	active = Color3.fromRGB(218, 137, 255), -- keybind-capture state
 	ddBg = Color3.fromRGB(10, 16, 28), -- dropdown list bg
 	disabled = Color3.fromRGB(28, 35, 48), -- disabled feature
 	section = Color3.fromRGB(0, 85, 175), -- section label bar
@@ -381,7 +381,7 @@ cfgSaveBtn.AutoButtonColor = false
 mkCorner(cfgSaveBtn, 5)
 
 local cfgLoadBtn = Instance.new("TextButton", actRow)
-cfgLoadBtn.BackgroundColor3 = P.panel
+cfgLoadBtn.BackgroundColor3 = P.sub
 cfgLoadBtn.BorderSizePixel = 0
 cfgLoadBtn.Position = UDim2.new(0.33, 2, 0, 0)
 cfgLoadBtn.Size = UDim2.new(0.34, -2, 1, 0)
