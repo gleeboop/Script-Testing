@@ -61,7 +61,7 @@ local P = {
 	thumb = Color3.fromRGB(100, 175, 255), -- thumb / value labels
 	text = Color3.fromRGB(235, 245, 255), -- primary text
 	sub = Color3.fromRGB(145, 165, 190), -- secondary / hint text
-	green = Color3.fromRGB(42, 190, 99), -- ON / safe
+	green = Color3.fromRGB(0, 70, 40), -- ON / safe
 	red = Color3.fromRGB(143, 42, 190), -- danger / fling
 	orange = Color3.fromRGB(75, 17, 102), -- warning / active fling
 	active = Color3.fromRGB(143, 42, 190), -- keybind-capture state
@@ -736,7 +736,7 @@ mkStroke(ModeLabel, P.border, 1, 0.6)
 local mlPad = Instance.new("UIPadding", ModeLabel)
 mlPad.PaddingLeft = UDim.new(0, 6)
 local PlaceBtn = mkScrollBtn(TargetContent, "Click to Place Center", 3)
-local IslandBtn = mkScrollBtn(TargetContent, "Reset to Island", 4, Color3.fromRGB(0, 70, 40))
+local IslandBtn = mkScrollBtn(TargetContent, "Reset to Island", 4, P.green)
 
 mkSectionRow(TargetContent, "Player Fling", 5)
 local PlayerLabel = Instance.new("TextLabel", TargetContent)
@@ -1470,7 +1470,6 @@ local function populateAndOpenDropdown()
 	local localDN = LocalPlayer.DisplayName ~= "" and LocalPlayer.DisplayName or LocalPlayer.Name
 	local entries = {
 		{ label = "  No one", player = nil, isLocal = false },
-		{ label = "  Local Player (" .. localDN .. ")", player = LocalPlayer, isLocal = true },
 	}
 	for _, e in ipairs(others) do
 		table.insert(entries, e)
@@ -1566,7 +1565,7 @@ ClickPlayerBtn.MouseButton1Click:Connect(function()
 		cancelClickMode()
 		clickMode = "player"
 		ClickPlayerBtn.BackgroundColor3 = P.active
-		ClickPlayerBtn.Text = " Clicking..."
+		ClickPlayerBtn.Text = "Clicking..."
 		closeDropdown()
 	end
 end)
@@ -1576,7 +1575,7 @@ FlingBtn.MouseButton1Click:Connect(function()
 	end
 	if not selectedPlayer or not selectedPlayer.Character then
 		PlayerLabel.Text = "⚠  No player selected!"
-		PlayerLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+		PlayerLabel.TextColor3 = p.red
 		return
 	end
 	flinging = true
