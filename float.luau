@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
-local BOUNCE_MULTIPLIER = 1.2 -- Multiplier on bounce (1.2 = 20% speed increase per bounce to feel extremely energetic!)
+local BOUNCE_MULTIPLIER = 1.0 -- Multiplier on bounce (1.0 to perfectly maintain speed, 1.2 for a boost!)
 -- =================================================
 
 local player = Players.LocalPlayer
@@ -20,6 +20,7 @@ local animator = nil
 
 local isFloating = false
 local zeroGravityForce = nil
+local bodyVelocity = nil -- Active force constraint to maintain velocity on contact
 local tumbleRotator = nil
 local activeTrack = nil
 local runServiceConnection = nil
@@ -37,7 +38,7 @@ local previousVelocity = Vector3.new(0, 0, 0) -- Stores pre-collision momentum
 -- Highly elastic, zero friction material properties
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
-	0, -- Friction (0 means no scraping/dragging on walls)
+	0, -- Friction (0 means no scraping/dragging on walls or players)
 	1, -- Elasticity (1 for a perfect bounce)
 	1, -- FrictionWeight
 	100 -- MAX ElasticityWeight
@@ -69,7 +70,7 @@ local function getAnimationObject(animName)
 	return fallback
 end
 
--- Apply custom zero-resistance physics and bounciness to all body parts (limbs stay collidable!)
+-- Apply custom zero-resistance physics and bounciness to all body parts
 local function applyBouncePhysics()
 	if not character then
 		return
@@ -128,8 +129,8 @@ end
 -- Forward declaration of toggle function to handle cleanup on death
 local toggleFloating
 
--- Handles the automatic vector reflection during a bounce
-local function handleBounce()
+-- Handles the automatic vector reflection during a bounce (wall or other player)
+local function handleBounce(hittingPart)
 	if hasBounced or not humanoidRootPart or not character then
 		return
 	end
@@ -140,35 +141,54 @@ local function handleBounce()
 	raycastParams.FilterDescendantsInstances = { character }
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- Cast an 8-stud ray directly ahead using PRE-collision velocity to find the wall normal
-	local rayDirection = previousVelocity.Unit * 8
-	local raycastResult = Workspace:Raycast(humanoidRootPart.Position, rayDirection, raycastParams)
-
-	if raycastResult then
-		local N = raycastResult.Normal -- The normal vector pointing straight out from the wall
-
-		-- Reflect the PRE-collision velocity: R = V - 2 * (V.N) * N
-		local reflected = previousVelocity - 2 * (previousVelocity:Dot(N)) * N
-
-		-- On the very first wall impact (not ceilings), cancel the upward float speed
-		if not floatSpeedCanceled then
-			if math.abs(N.Y) < 0.5 then
-				floatSpeedCanceled = true
-				reflected = Vector3.new(reflected.X, 0, reflected.Z)
-			end
-		end
-
-		-- Calculate boosted bounce speed and update our target lock speed
-		local boostedSpeed = speedToMaintain * BOUNCE_MULTIPLIER
-		speedToMaintain = boostedSpeed
-
-		-- Apply the reflected vector at our boosted speed
-		humanoidRootPart.AssemblyLinearVelocity = reflected.Unit * boostedSpeed
-
-		-- CRITICAL PHYSICS FIX: Pivot the character slightly away from the wall normal
-		-- This completely prevents sticking and friction on the frames after the collision!
-		character:PivotTo(character:GetPivot() + (N * 0.6))
+	-- Get the current directional velocity from BodyVelocity (or fallback to previousVelocity)
+	local currentVelocity = previousVelocity
+	if bodyVelocity then
+		currentVelocity = bodyVelocity.Velocity
 	end
+
+	if currentVelocity.Magnitude < 0.1 then
+		currentVelocity = Vector3.new(0, FLOAT_SPEED, 0)
+	end
+
+	-- CRITICAL PHYSICS FIX: Start the raycast 3 studs BEHIND the hitting part and cast 8 studs FORWARD.
+	-- Since hittingPart is the actual part that touched, this is guaranteed to hit the wall!
+	local startPosition = hittingPart.Position - (currentVelocity.Unit * 3)
+	local rayDirection = currentVelocity.Unit * 8
+	local raycastResult = Workspace:Raycast(startPosition, rayDirection, raycastParams)
+
+	local N = nil
+	if raycastResult then
+		N = raycastResult.Normal -- The normal vector pointing straight out from the wall/player
+	else
+		-- Fallback if raycast fails: reflect using the opposite direction (bounce straight back)
+		N = -currentVelocity.Unit
+	end
+
+	-- Reflect the pre-collision velocity: R = V - 2 * (V.N) * N
+	local reflected = currentVelocity - 2 * (currentVelocity:Dot(N)) * N
+
+	-- On the very first wall impact (not ceilings), cancel the upward float speed
+	if not floatSpeedCanceled then
+		if math.abs(N.Y) < 0.5 then
+			floatSpeedCanceled = true
+			reflected = Vector3.new(reflected.X, 0, reflected.Z)
+		end
+	end
+
+	-- Calculate and lock our speed, applying the bounce multiplier
+	local boostedSpeed = speedToMaintain * BOUNCE_MULTIPLIER
+	speedToMaintain = boostedSpeed
+
+	-- Apply the brand new pushing force (instant velocity shift via BodyVelocity)
+	local finalVelocity = reflected.Unit * boostedSpeed
+	if bodyVelocity then
+		bodyVelocity.Velocity = finalVelocity
+	end
+	humanoidRootPart.AssemblyLinearVelocity = finalVelocity
+
+	-- Displace slightly away from the impact normal to prevent stuck-frames
+	character:PivotTo(character:GetPivot() + (N * 0.6))
 
 	-- Cooldown so we bounce away before accepting the next collision
 	task.wait(0.15)
@@ -194,7 +214,7 @@ local function connectTouched()
 					return
 				end
 
-				handleBounce()
+				handleBounce(part) -- Pass the exact part that registered the collision!
 			end)
 			table.insert(touchedConnections, conn)
 		end
@@ -267,7 +287,13 @@ toggleFloating = function()
 
 		speedToMaintain = initialVelocity.Magnitude
 		previousVelocity = initialVelocity -- Initialize pre-collision tracking
-		humanoidRootPart.AssemblyLinearVelocity = initialVelocity
+
+		-- Create a BodyVelocity object to actively maintain velocity and prevent momentum loss on wall contact
+		bodyVelocity = Instance.new("BodyVelocity")
+		bodyVelocity.Name = "ZeroG_Velocity"
+		bodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 500000 -- Strong active force in all directions
+		bodyVelocity.Velocity = initialVelocity
+		bodyVelocity.Parent = humanoidRootPart
 
 		-- 8. Apply slow tumble rotation
 		tumbleRotator = Instance.new("BodyAngularVelocity")
@@ -281,21 +307,20 @@ toggleFloating = function()
 		applyBouncePhysics()
 		connectTouched()
 
-		-- 10. Start speed lock loop (glides you at constant speed, but updates memory of momentum)
+		-- 10. Start speed tracking connection (updates pre-collision velocity memory smoothly)
 		runServiceConnection = RunService.Heartbeat:Connect(function()
 			if not isFloating or not humanoidRootPart then
 				return
 			end
-			local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
 
-			-- Only update previousVelocity if we are moving at normal speed (ignores collision halts)
-			if currentVelocity.Magnitude > (speedToMaintain * 0.8) then
-				previousVelocity = currentVelocity
-			end
-
-			-- Keep speed locked in free space
-			if currentVelocity.Magnitude > 0.1 then
-				humanoidRootPart.AssemblyLinearVelocity = currentVelocity.Unit * speedToMaintain
+			-- Keep previousVelocity updated with our intended target direction
+			if bodyVelocity then
+				previousVelocity = bodyVelocity.Velocity
+			else
+				local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
+				if currentVelocity.Magnitude > (speedToMaintain * 0.8) then
+					previousVelocity = currentVelocity
+				end
 			end
 		end)
 
@@ -305,6 +330,10 @@ toggleFloating = function()
 		if zeroGravityForce then
 			zeroGravityForce:Destroy()
 			zeroGravityForce = nil
+		end
+		if bodyVelocity then
+			bodyVelocity:Destroy()
+			bodyVelocity = nil
 		end
 		if tumbleRotator then
 			tumbleRotator:Destroy()
@@ -331,7 +360,7 @@ end
 
 -- ================= CHARACTER SETUP & PERSISTENCE =================
 local function setupCharacter(char)
-	character = player.Character -- assignment: character value = player.Character
+	character = player.Character
 	humanoidRootPart = char:WaitForChild("HumanoidRootPart")
 	humanoid = char:WaitForChild("Humanoid")
 	animator = humanoid:WaitForChild("Animator")
