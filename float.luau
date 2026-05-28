@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
+local BOUNCE_MULTIPLIER = 1.3 -- Multiplier applied on every collision (1.0 = perfect bounce, 1.3 = hyper-bouncy boost!)
 -- =================================================
 
 local player = Players.LocalPlayer
@@ -27,13 +28,13 @@ local originalAngularDamping = {}
 local touchedConnections = {}
 local hasBounced = false
 
--- Highly elastic, zero friction material properties for perfect bouncing
+-- Highly elastic, zero friction material properties with MAX weight override
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
-	0, -- Friction (0 means no scraping/dragging on walls or other players)
-	1.5, -- Elasticity (1 for a perfect rebound)
+	0, -- Friction
+	1, -- Elasticity (1 = perfect bounce)
 	1, -- FrictionWeight
-	1 -- ElasticityWeight
+	100 -- MAX ElasticityWeight (Forces your 100% bounciness to override all map walls)
 )
 
 -- Dynamic R6/R15 animation loader
@@ -138,11 +139,20 @@ local function handleBounce()
 
 	local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
 	local newY = currentVelocity.Y
+
+	-- If Y-velocity is positive/zero, we hit a wall. Cancel float upward drift.
+	-- If Y-velocity is negative, we hit a ceiling and bounced down. Amplify the downward bounce!
 	if newY > -0.5 then
-		newY = 0 -- Cancel upward drift if we hit a wall or side obstacle
+		newY = 0
+	else
+		newY = newY * BOUNCE_MULTIPLIER
 	end
 
-	humanoidRootPart.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, newY, currentVelocity.Z)
+	-- Apply the bounce multiplier to amplify X and Z speed upon impact!
+	local finalVelocity =
+		Vector3.new(currentVelocity.X * BOUNCE_MULTIPLIER, newY, currentVelocity.Z * BOUNCE_MULTIPLIER)
+
+	humanoidRootPart.AssemblyLinearVelocity = finalVelocity
 end
 
 local function connectTouched()
@@ -230,9 +240,7 @@ toggleFloating = function()
 		if isWalking then
 			initialVelocity = Vector3.new(currentVel.X, FLOAT_SPEED, currentVel.Z)
 		else
-			local randomX = (math.random(-15, 15) / 10)
-			local randomZ = (math.random(-15, 15) / 10)
-			initialVelocity = Vector3.new(randomX, FLOAT_SPEED, randomZ)
+			initialVelocity = Vector3.new(0, FLOAT_SPEED, 0)
 		end
 		humanoidRootPart.AssemblyLinearVelocity = initialVelocity
 
@@ -248,7 +256,7 @@ toggleFloating = function()
 		applyBouncePhysics()
 		connectTouched()
 
-		print("Responsive Zero-G: Enabled!")
+		print("Hyper-Bouncy Zero-G: Enabled!")
 	else
 		-- Restore normal gravity, materials, drag, and controls
 		if zeroGravityForce then
@@ -270,7 +278,7 @@ toggleFloating = function()
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
 		humanoid.PlatformStand = false
 
-		print("Responsive Zero-G: Disabled.")
+		print("Hyper-Bouncy Zero-G: Disabled.")
 	end
 end
 
