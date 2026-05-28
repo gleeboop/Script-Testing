@@ -31,6 +31,7 @@ local touchedConnections = {}
 local hasBounced = false
 local floatSpeedCanceled = false
 local speedToMaintain = 0
+local previousVelocity = Vector3.new(0, 0, 0) -- Stores pre-collision momentum
 
 -- Highly elastic, zero friction material properties for perfect bouncing
 local bounceMaterial = PhysicalProperties.new(
@@ -138,31 +139,30 @@ local function handleBounce()
 	raycastParams.FilterDescendantsInstances = { character }
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- Cast an 8-stud ray directly ahead in the direction we are moving
-	local rayDirection = humanoidRootPart.AssemblyLinearVelocity.Unit * 8
+	-- CRITICAL FIX: Shoot the ray using PRE-collision velocity direction to ensure we hit the wall we crashed into!
+	local rayDirection = previousVelocity.Unit * 8
 	local raycastResult = Workspace:Raycast(humanoidRootPart.Position, rayDirection, raycastParams)
 
 	if raycastResult then
-		local N = raycastResult.Normal -- The 3D normal vector of the wall we hit
-		local V = humanoidRootPart.AssemblyLinearVelocity
+		local N = raycastResult.Normal -- The normal vector straight out from the wall
 
-		-- Classic 3D vector reflection formula: R = V - 2 * (V.N) * N
-		local reflected = V - 2 * (V:Dot(N)) * N
+		-- Reflect the PRE-collision velocity to preserve full speed and energy!
+		local reflected = previousVelocity - 2 * (previousVelocity:Dot(N)) * N
 
 		-- On the very first wall impact (not ceilings), cancel the upward float speed
 		if not floatSpeedCanceled then
-			-- If normal has low Y aspect, it's a vertical wall, not a ceiling
 			if math.abs(N.Y) < 0.5 then
 				floatSpeedCanceled = true
 				reflected = Vector3.new(reflected.X, 0, reflected.Z)
 			end
 		end
 
-		-- Securely lock velocity and redirect player at exactly 100% speed!
-		humanoidRootPart.AssemblyLinearVelocity = reflected.Unit * speedToMaintain
+		-- Instantly set the velocity to the perfect reflected vector at full speed (no delay!)
+		speedToMaintain = reflected.Magnitude
+		humanoidRootPart.AssemblyLinearVelocity = reflected
 	end
 
-	-- Small cooldown to allow character to bounce away before accepting next collision
+	-- Cooldown so we bounce away before accepting the next collision
 	task.wait(0.15)
 	hasBounced = false
 end
@@ -256,7 +256,9 @@ toggleFloating = function()
 		else
 			initialVelocity = Vector3.new(0, FLOAT_SPEED, 0)
 		end
+
 		speedToMaintain = initialVelocity.Magnitude
+		previousVelocity = initialVelocity -- Initialize pre-collision tracking
 		humanoidRootPart.AssemblyLinearVelocity = initialVelocity
 
 		-- 8. Apply slow tumble rotation
@@ -271,14 +273,20 @@ toggleFloating = function()
 		applyBouncePhysics()
 		connectTouched()
 
-		-- 10. Start speed lock loop (glides you at a constant speed, but allows other players to push you!)
+		-- 10. Start speed lock loop (glides you at constant speed, but updates memory of momentum)
 		runServiceConnection = RunService.Heartbeat:Connect(function()
 			if not isFloating or not humanoidRootPart then
 				return
 			end
 			local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
+
+			-- Only update previousVelocity if we are moving at normal speed (ignores collision halts)
+			if currentVelocity.Magnitude > (speedToMaintain * 0.8) then
+				previousVelocity = currentVelocity
+			end
+
+			-- Keep speed locked in free space
 			if currentVelocity.Magnitude > 0.1 then
-				-- Keep speed locked, but preserve the current direction (which changes on bounce or push!)
 				humanoidRootPart.AssemblyLinearVelocity = currentVelocity.Unit * speedToMaintain
 			end
 		end)
