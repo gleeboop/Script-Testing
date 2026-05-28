@@ -6,7 +6,6 @@ local Workspace = game:GetService("Workspace")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
-local BOUNCE_MULTIPLIER = 1.3 -- Speed multiplier on impact (1.3 = 30% faster on every single bounce!)
 -- =================================================
 
 local player = Players.LocalPlayer
@@ -25,6 +24,7 @@ local activeTrack = nil
 local originalProperties = {}
 local originalDamping = {}
 local originalAngularDamping = {}
+local originalCollisions = {}
 local touchedConnections = {}
 
 local hasBounced = false
@@ -33,8 +33,8 @@ local floatSpeedCanceled = false
 -- Highly elastic, zero friction material properties for perfect bouncing
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
-	0, -- Friction (0 means no sticking to walls or other players)
-	1, -- Elasticity (1 for a perfect bounce)
+	0, -- Friction
+	1, -- Elasticity (1 for a perfect lossless bounce)
 	1, -- FrictionWeight
 	100 -- MAX ElasticityWeight (Forces your bounciness to override all other game objects)
 )
@@ -65,7 +65,7 @@ local function getAnimationObject(animName)
 	return fallback
 end
 
--- Apply custom zero-resistance physics and bounciness to all body parts
+-- Apply custom zero-resistance physics, bounciness, and make limbs non-collidable
 local function applyBouncePhysics()
 	if not character then
 		return
@@ -83,11 +83,17 @@ local function applyBouncePhysics()
 			-- Save and remove spin friction (angular damping) so we tumble smoothly
 			originalAngularDamping[part] = part.AssemblyAngularDamping
 			part.AssemblyAngularDamping = 0
+
+			-- Make limbs non-collidable so they don't act like shock absorbers and ruin the bounce
+			if part.Name ~= "HumanoidRootPart" then
+				originalCollisions[part] = part.CanCollide
+				part.CanCollide = false
+			end
 		end
 	end
 end
 
--- Restore original physical properties and drag
+-- Restore original physical properties, collisions, and drag
 local function restoreBouncePhysics()
 	for part, props in pairs(originalProperties) do
 		if part and part.Parent then
@@ -109,6 +115,13 @@ local function restoreBouncePhysics()
 		end
 	end
 	originalAngularDamping = {}
+
+	for part, canCollide in pairs(originalCollisions) do
+		if part and part.Parent then
+			part.CanCollide = canCollide
+		end
+	end
+	originalCollisions = {}
 end
 
 local function getCharacterMass()
@@ -127,7 +140,7 @@ end
 -- Forward declaration of toggle function to handle cleanup on death
 local toggleFloating
 
--- Handles the automatic velocity adjustments during a bounce/impact
+-- Handles canceling the upward float speed on the very first collision
 local function handleBounce()
 	if hasBounced then
 		return
@@ -147,42 +160,36 @@ local function handleBounce()
 	if not floatSpeedCanceled then
 		floatSpeedCanceled = true
 		if currentVelocity.Y > -0.5 then
-			currentVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z) -- Halt vertical rising
+			humanoidRootPart.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z) -- Halt vertical rising
 		end
 	end
 
-	-- Apply the bounce multiplier to amplify speed on ALL axes (X, Y, Z)!
-	local finalVelocity = currentVelocity * BOUNCE_MULTIPLIER
-	humanoidRootPart.AssemblyLinearVelocity = finalVelocity
-
-	-- Wait a small cooldown so we fly away from the wall before we can bounce again
+	-- Wait a small cooldown so we bounce away from the wall before we can trigger another bounce check
 	task.wait(0.15)
 	hasBounced = false
 end
 
+-- Only connect touch listeners to the rigid HumanoidRootPart for 100% collision accuracy
 local function connectTouched()
-	if not character then
+	if not humanoidRootPart then
 		return
 	end
 	touchedConnections = {}
-	for _, part in ipairs(character:GetDescendants()) do
-		if part:IsA("BasePart") then
-			local conn = part.Touched:Connect(function(otherPart)
-				if not isFloating or hasBounced then
-					return
-				end
-				if otherPart:IsDescendantOf(character) then
-					return
-				end
-				if otherPart.CanCollide == false then
-					return
-				end
 
-				handleBounce()
-			end)
-			table.insert(touchedConnections, conn)
+	local conn = humanoidRootPart.Touched:Connect(function(otherPart)
+		if not isFloating or hasBounced then
+			return
 		end
-	end
+		if otherPart:IsDescendantOf(character) then
+			return
+		end
+		if otherPart.CanCollide == false then
+			return
+		end
+
+		handleBounce()
+	end)
+	table.insert(touchedConnections, conn)
 end
 
 local function disconnectTouched()
@@ -258,11 +265,11 @@ toggleFloating = function()
 			Vector3.new(math.random(-10, 10) / 20, math.random(-10, 10) / 20, math.random(-10, 10) / 20)
 		tumbleRotator.Parent = humanoidRootPart
 
-		-- 9. Remove air friction and apply bounciness
+		-- 9. Remove air friction, apply perfect bounciness, and phase out limb collisions
 		applyBouncePhysics()
 		connectTouched()
 
-		print("Infinite Bouncing Zero-G: Enabled!")
+		print("Lossless Rigid Zero-G: Enabled!")
 	else
 		-- Restore normal gravity, materials, drag, and controls
 		if zeroGravityForce then
@@ -284,7 +291,7 @@ toggleFloating = function()
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
 		humanoid.PlatformStand = false
 
-		print("Infinite Bouncing Zero-G: Disabled.")
+		print("Lossless Rigid Zero-G: Disabled.")
 	end
 end
 
