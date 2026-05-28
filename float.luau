@@ -20,7 +20,6 @@ local animator = nil
 
 local isFloating = false
 local zeroGravityForce = nil
-local bodyVelocity = nil -- Active force constraint to maintain velocity on contact
 local tumbleRotator = nil
 local activeTrack = nil
 local runServiceConnection = nil
@@ -141,32 +140,28 @@ local function handleBounce(hittingPart)
 	raycastParams.FilterDescendantsInstances = { character }
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- Get the current directional velocity from BodyVelocity (or fallback to previousVelocity)
-	local currentVelocity = previousVelocity
-	if bodyVelocity then
-		currentVelocity = bodyVelocity.Velocity
+	-- Calculate direction from character center to hitting part
+	local dir = (hittingPart.Position - humanoidRootPart.Position)
+	if dir.Magnitude < 0.1 then
+		dir = previousVelocity
 	end
+	dir = dir.Unit
 
-	if currentVelocity.Magnitude < 0.1 then
-		currentVelocity = Vector3.new(0, FLOAT_SPEED, 0)
-	end
-
-	-- CRITICAL PHYSICS FIX: Start the raycast 3 studs BEHIND the hitting part and cast 8 studs FORWARD.
-	-- Since hittingPart is the actual part that touched, this is guaranteed to hit the wall!
-	local startPosition = hittingPart.Position - (currentVelocity.Unit * 3)
-	local rayDirection = currentVelocity.Unit * 8
+	-- Raycast from character center, outward through the hitting part to find the wall
+	local startPosition = humanoidRootPart.Position
+	local rayDirection = dir * 15
 	local raycastResult = Workspace:Raycast(startPosition, rayDirection, raycastParams)
 
 	local N = nil
 	if raycastResult then
 		N = raycastResult.Normal -- The normal vector pointing straight out from the wall/player
 	else
-		-- Fallback if raycast fails: reflect using the opposite direction (bounce straight back)
-		N = -currentVelocity.Unit
+		-- Fallback: bounce straight back in opposite direction of movement
+		N = -previousVelocity.Unit
 	end
 
-	-- Reflect the pre-collision velocity: R = V - 2 * (V.N) * N
-	local reflected = currentVelocity - 2 * (currentVelocity:Dot(N)) * N
+	-- Reflect the PRE-collision velocity: R = V - 2 * (V.N) * N
+	local reflected = previousVelocity - 2 * (previousVelocity:Dot(N)) * N
 
 	-- On the very first wall impact (not ceilings), cancel the upward float speed
 	if not floatSpeedCanceled then
@@ -180,18 +175,15 @@ local function handleBounce(hittingPart)
 	local boostedSpeed = speedToMaintain * BOUNCE_MULTIPLIER
 	speedToMaintain = boostedSpeed
 
-	-- Apply the brand new pushing force (instant velocity shift via BodyVelocity)
-	local finalVelocity = reflected.Unit * boostedSpeed
-	if bodyVelocity then
-		bodyVelocity.Velocity = finalVelocity
-	end
-	humanoidRootPart.AssemblyLinearVelocity = finalVelocity
+	-- Apply the brand new pushing force (instant velocity shift)
+	previousVelocity = reflected.Unit * boostedSpeed
+	humanoidRootPart.AssemblyLinearVelocity = previousVelocity
 
 	-- Displace slightly away from the impact normal to prevent stuck-frames
 	character:PivotTo(character:GetPivot() + (N * 0.6))
 
 	-- Cooldown so we bounce away before accepting the next collision
-	task.wait(0.15)
+	task.wait(0.1)
 	hasBounced = false
 end
 
@@ -214,7 +206,7 @@ local function connectTouched()
 					return
 				end
 
-				handleBounce(part) -- Pass the exact part that registered the collision!
+				handleBounce(part) -- Pass the hitting part to calculate perfect normals!
 			end)
 			table.insert(touchedConnections, conn)
 		end
@@ -287,13 +279,7 @@ toggleFloating = function()
 
 		speedToMaintain = initialVelocity.Magnitude
 		previousVelocity = initialVelocity -- Initialize pre-collision tracking
-
-		-- Create a BodyVelocity object to actively maintain velocity and prevent momentum loss on wall contact
-		bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.Name = "ZeroG_Velocity"
-		bodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 500000 -- Strong active force in all directions
-		bodyVelocity.Velocity = initialVelocity
-		bodyVelocity.Parent = humanoidRootPart
+		humanoidRootPart.AssemblyLinearVelocity = initialVelocity
 
 		-- 8. Apply slow tumble rotation
 		tumbleRotator = Instance.new("BodyAngularVelocity")
@@ -307,20 +293,21 @@ toggleFloating = function()
 		applyBouncePhysics()
 		connectTouched()
 
-		-- 10. Start speed tracking connection (updates pre-collision velocity memory smoothly)
+		-- 10. Start speed lock loop (glides you at constant speed, but updates memory of momentum)
 		runServiceConnection = RunService.Heartbeat:Connect(function()
 			if not isFloating or not humanoidRootPart then
 				return
 			end
+			local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
 
-			-- Keep previousVelocity updated with our intended target direction
-			if bodyVelocity then
-				previousVelocity = bodyVelocity.Velocity
-			else
-				local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
-				if currentVelocity.Magnitude > (speedToMaintain * 0.8) then
-					previousVelocity = currentVelocity
-				end
+			-- Only update previousVelocity if we are moving at normal speed (ignores collision halts)
+			if currentVelocity.Magnitude > (speedToMaintain * 0.8) then
+				previousVelocity = currentVelocity
+			end
+
+			-- Keep speed locked in free space
+			if currentVelocity.Magnitude > 0.1 then
+				humanoidRootPart.AssemblyLinearVelocity = currentVelocity.Unit * speedToMaintain
 			end
 		end)
 
@@ -330,10 +317,6 @@ toggleFloating = function()
 		if zeroGravityForce then
 			zeroGravityForce:Destroy()
 			zeroGravityForce = nil
-		end
-		if bodyVelocity then
-			bodyVelocity:Destroy()
-			bodyVelocity = nil
 		end
 		if tumbleRotator then
 			tumbleRotator:Destroy()
