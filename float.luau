@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
+local BOUNCE_MULTIPLIER = 1.2 -- Multiplier on bounce (1.2 = 20% speed increase per bounce to feel extremely energetic!)
 -- =================================================
 
 local player = Players.LocalPlayer
@@ -33,7 +34,7 @@ local floatSpeedCanceled = false
 local speedToMaintain = 0
 local previousVelocity = Vector3.new(0, 0, 0) -- Stores pre-collision momentum
 
--- Highly elastic, zero friction material properties for perfect bouncing
+-- Highly elastic, zero friction material properties
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
 	0, -- Friction (0 means no scraping/dragging on walls)
@@ -129,7 +130,7 @@ local toggleFloating
 
 -- Handles the automatic vector reflection during a bounce
 local function handleBounce()
-	if hasBounced or not humanoidRootPart then
+	if hasBounced or not humanoidRootPart or not character then
 		return
 	end
 	hasBounced = true
@@ -139,14 +140,14 @@ local function handleBounce()
 	raycastParams.FilterDescendantsInstances = { character }
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- CRITICAL FIX: Shoot the ray using PRE-collision velocity direction to ensure we hit the wall we crashed into!
+	-- Cast an 8-stud ray directly ahead using PRE-collision velocity to find the wall normal
 	local rayDirection = previousVelocity.Unit * 8
 	local raycastResult = Workspace:Raycast(humanoidRootPart.Position, rayDirection, raycastParams)
 
 	if raycastResult then
-		local N = raycastResult.Normal -- The normal vector straight out from the wall
+		local N = raycastResult.Normal -- The normal vector pointing straight out from the wall
 
-		-- Reflect the PRE-collision velocity to preserve full speed and energy!
+		-- Reflect the PRE-collision velocity: R = V - 2 * (V.N) * N
 		local reflected = previousVelocity - 2 * (previousVelocity:Dot(N)) * N
 
 		-- On the very first wall impact (not ceilings), cancel the upward float speed
@@ -157,9 +158,16 @@ local function handleBounce()
 			end
 		end
 
-		-- Instantly set the velocity to the perfect reflected vector at full speed (no delay!)
-		speedToMaintain = reflected.Magnitude
-		humanoidRootPart.AssemblyLinearVelocity = reflected
+		-- Calculate boosted bounce speed and update our target lock speed
+		local boostedSpeed = speedToMaintain * BOUNCE_MULTIPLIER
+		speedToMaintain = boostedSpeed
+
+		-- Apply the reflected vector at our boosted speed
+		humanoidRootPart.AssemblyLinearVelocity = reflected.Unit * boostedSpeed
+
+		-- CRITICAL PHYSICS FIX: Pivot the character slightly away from the wall normal
+		-- This completely prevents sticking and friction on the frames after the collision!
+		character:PivotTo(character:GetPivot() + (N * 0.6))
 	end
 
 	-- Cooldown so we bounce away before accepting the next collision
@@ -291,7 +299,7 @@ toggleFloating = function()
 			end
 		end)
 
-		print("Lossless Rigid Zero-G: Enabled!")
+		print("Lossless Zero-G: Enabled!")
 	else
 		-- Restore normal gravity, materials, drag, and controls
 		if zeroGravityForce then
@@ -317,7 +325,7 @@ toggleFloating = function()
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
 		humanoid.PlatformStand = false
 
-		print("Lossless Rigid Zero-G: Disabled.")
+		print("Lossless Zero-G: Disabled.")
 	end
 end
 
