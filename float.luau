@@ -31,7 +31,7 @@ local hasBounced = false
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
 	0, -- Friction (0 means no scraping/dragging on walls or other players)
-	1, -- Elasticity (1 for a perfect rebound)
+	1.5, -- Elasticity (1 for a perfect rebound)
 	1, -- FrictionWeight
 	1 -- ElasticityWeight
 )
