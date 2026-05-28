@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
@@ -20,23 +21,24 @@ local isFloating = false
 local zeroGravityForce = nil
 local tumbleRotator = nil
 local activeTrack = nil
+local runServiceConnection = nil
 
 local originalProperties = {}
 local originalDamping = {}
 local originalAngularDamping = {}
-local originalCollisions = {}
 local touchedConnections = {}
 
 local hasBounced = false
 local floatSpeedCanceled = false
+local speedToMaintain = 0
 
 -- Highly elastic, zero friction material properties for perfect bouncing
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
-	0, -- Friction
-	1, -- Elasticity (1 for a perfect lossless bounce)
+	0, -- Friction (0 means no scraping/dragging on walls)
+	1, -- Elasticity (1 for a perfect bounce)
 	1, -- FrictionWeight
-	100 -- MAX ElasticityWeight (Forces your bounciness to override all other game objects)
+	100 -- MAX ElasticityWeight
 )
 
 -- Dynamic R6/R15 animation loader
@@ -65,35 +67,26 @@ local function getAnimationObject(animName)
 	return fallback
 end
 
--- Apply custom zero-resistance physics, bounciness, and make limbs non-collidable
+-- Apply custom zero-resistance physics and bounciness to all body parts (limbs stay collidable!)
 local function applyBouncePhysics()
 	if not character then
 		return
 	end
 	for _, part in ipairs(character:GetDescendants()) do
 		if part:IsA("BasePart") then
-			-- Save and apply physical bounciness materials
 			originalProperties[part] = part.CustomPhysicalProperties
 			part.CustomPhysicalProperties = bounceMaterial
 
-			-- Save and remove air resistance (linear damping) completely so we glide forever
 			originalDamping[part] = part.AssemblyLinearDamping
 			part.AssemblyLinearDamping = 0
 
-			-- Save and remove spin friction (angular damping) so we tumble smoothly
 			originalAngularDamping[part] = part.AssemblyAngularDamping
 			part.AssemblyAngularDamping = 0
-
-			-- Make limbs non-collidable so they don't act like shock absorbers and ruin the bounce
-			if part.Name ~= "HumanoidRootPart" then
-				originalCollisions[part] = part.CanCollide
-				part.CanCollide = false
-			end
 		end
 	end
 end
 
--- Restore original physical properties, collisions, and drag
+-- Restore original physical properties and drag
 local function restoreBouncePhysics()
 	for part, props in pairs(originalProperties) do
 		if part and part.Parent then
@@ -115,13 +108,6 @@ local function restoreBouncePhysics()
 		end
 	end
 	originalAngularDamping = {}
-
-	for part, canCollide in pairs(originalCollisions) do
-		if part and part.Parent then
-			part.CanCollide = canCollide
-		end
-	end
-	originalCollisions = {}
 end
 
 local function getCharacterMass()
@@ -140,56 +126,71 @@ end
 -- Forward declaration of toggle function to handle cleanup on death
 local toggleFloating
 
--- Handles canceling the upward float speed on the very first collision
+-- Handles the automatic vector reflection during a bounce
 local function handleBounce()
-	if hasBounced then
+	if hasBounced or not humanoidRootPart then
 		return
 	end
 	hasBounced = true
 
-	-- Wait 1 frame for Roblox to complete the physical bounce calculation
-	task.wait()
-	if not isFloating or not humanoidRootPart then
-		hasBounced = false
-		return
-	end
+	-- Configure raycast to ignore player's character
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterDescendantsInstances = { character }
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
+	-- Cast an 8-stud ray directly ahead in the direction we are moving
+	local rayDirection = humanoidRootPart.AssemblyLinearVelocity.Unit * 8
+	local raycastResult = Workspace:Raycast(humanoidRootPart.Position, rayDirection, raycastParams)
 
-	-- On the very first collision, cancel the vertical float speed up if we hit a wall
-	if not floatSpeedCanceled then
-		floatSpeedCanceled = true
-		if currentVelocity.Y > -0.5 then
-			humanoidRootPart.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z) -- Halt vertical rising
+	if raycastResult then
+		local N = raycastResult.Normal -- The 3D normal vector of the wall we hit
+		local V = humanoidRootPart.AssemblyLinearVelocity
+
+		-- Classic 3D vector reflection formula: R = V - 2 * (V.N) * N
+		local reflected = V - 2 * (V:Dot(N)) * N
+
+		-- On the very first wall impact (not ceilings), cancel the upward float speed
+		if not floatSpeedCanceled then
+			-- If normal has low Y aspect, it's a vertical wall, not a ceiling
+			if math.abs(N.Y) < 0.5 then
+				floatSpeedCanceled = true
+				reflected = Vector3.new(reflected.X, 0, reflected.Z)
+			end
 		end
+
+		-- Securely lock velocity and redirect player at exactly 100% speed!
+		humanoidRootPart.AssemblyLinearVelocity = reflected.Unit * speedToMaintain
 	end
 
-	-- Wait a small cooldown so we bounce away from the wall before we can trigger another bounce check
+	-- Small cooldown to allow character to bounce away before accepting next collision
 	task.wait(0.15)
 	hasBounced = false
 end
 
--- Only connect touch listeners to the rigid HumanoidRootPart for 100% collision accuracy
+-- Connect touched events to character parts
 local function connectTouched()
-	if not humanoidRootPart then
+	if not character then
 		return
 	end
 	touchedConnections = {}
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local conn = part.Touched:Connect(function(otherPart)
+				if not isFloating or hasBounced then
+					return
+				end
+				if otherPart:IsDescendantOf(character) then
+					return
+				end
+				if otherPart.CanCollide == false then
+					return
+				end
 
-	local conn = humanoidRootPart.Touched:Connect(function(otherPart)
-		if not isFloating or hasBounced then
-			return
+				handleBounce()
+			end)
+			table.insert(touchedConnections, conn)
 		end
-		if otherPart:IsDescendantOf(character) then
-			return
-		end
-		if otherPart.CanCollide == false then
-			return
-		end
-
-		handleBounce()
-	end)
-	table.insert(touchedConnections, conn)
+	end
 end
 
 local function disconnectTouched()
@@ -236,7 +237,7 @@ toggleFloating = function()
 			activeTrack:Play()
 		end
 
-		-- 5. Enable PlatformStand to make character limp and physically responsive
+		-- 5. Enable PlatformStand to make character physically responsive
 		humanoid.PlatformStand = true
 
 		-- 6. Neutralize vertical gravity perfectly (0 weight)
@@ -248,13 +249,14 @@ toggleFloating = function()
 		zeroGravityForce.Force = Vector3.new(0, counterForce, 0)
 		zeroGravityForce.Parent = humanoidRootPart
 
-		-- 7. Apply launch velocity
+		-- 7. Apply launch velocity and lock our speed magnitude
 		local initialVelocity
 		if isWalking then
 			initialVelocity = Vector3.new(currentVel.X, FLOAT_SPEED, currentVel.Z)
 		else
 			initialVelocity = Vector3.new(0, FLOAT_SPEED, 0)
 		end
+		speedToMaintain = initialVelocity.Magnitude
 		humanoidRootPart.AssemblyLinearVelocity = initialVelocity
 
 		-- 8. Apply slow tumble rotation
@@ -265,9 +267,21 @@ toggleFloating = function()
 			Vector3.new(math.random(-10, 10) / 20, math.random(-10, 10) / 20, math.random(-10, 10) / 20)
 		tumbleRotator.Parent = humanoidRootPart
 
-		-- 9. Remove air friction, apply perfect bounciness, and phase out limb collisions
+		-- 9. Remove air friction, apply perfect bounciness
 		applyBouncePhysics()
 		connectTouched()
+
+		-- 10. Start speed lock loop (glides you at a constant speed, but allows other players to push you!)
+		runServiceConnection = RunService.Heartbeat:Connect(function()
+			if not isFloating or not humanoidRootPart then
+				return
+			end
+			local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
+			if currentVelocity.Magnitude > 0.1 then
+				-- Keep speed locked, but preserve the current direction (which changes on bounce or push!)
+				humanoidRootPart.AssemblyLinearVelocity = currentVelocity.Unit * speedToMaintain
+			end
+		end)
 
 		print("Lossless Rigid Zero-G: Enabled!")
 	else
@@ -283,6 +297,10 @@ toggleFloating = function()
 		if activeTrack then
 			activeTrack:Stop()
 			activeTrack = nil
+		end
+		if runServiceConnection then
+			runServiceConnection:Disconnect()
+			runServiceConnection = nil
 		end
 
 		disconnectTouched()
