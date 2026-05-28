@@ -6,7 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 -- ================= CONFIGURATION =================
 local FLOAT_SPEED = 4 -- Speed you will drift upwards initially
-local BOUNCE_MULTIPLIER = 1.3 -- Multiplier applied on every collision (1.0 = perfect bounce, 1.3 = hyper-bouncy boost!)
+local BOUNCE_MULTIPLIER = 1.3 -- Speed multiplier on impact (1.3 = 30% faster on every single bounce!)
 -- =================================================
 
 local player = Players.LocalPlayer
@@ -26,15 +26,17 @@ local originalProperties = {}
 local originalDamping = {}
 local originalAngularDamping = {}
 local touchedConnections = {}
-local hasBounced = false
 
--- Highly elastic, zero friction material properties with MAX weight override
+local hasBounced = false
+local floatSpeedCanceled = false
+
+-- Highly elastic, zero friction material properties for perfect bouncing
 local bounceMaterial = PhysicalProperties.new(
 	0.7, -- Density
-	0, -- Friction
-	1, -- Elasticity (1 = perfect bounce)
+	0, -- Friction (0 means no sticking to walls or other players)
+	1, -- Elasticity (1 for a perfect bounce)
 	1, -- FrictionWeight
-	100 -- MAX ElasticityWeight (Forces your 100% bounciness to override all map walls)
+	100 -- MAX ElasticityWeight (Forces your bounciness to override all other game objects)
 )
 
 -- Dynamic R6/R15 animation loader
@@ -132,27 +134,30 @@ local function handleBounce()
 	end
 	hasBounced = true
 
+	-- Wait 1 frame for Roblox to complete the physical bounce calculation
 	task.wait()
 	if not isFloating or not humanoidRootPart then
+		hasBounced = false
 		return
 	end
 
 	local currentVelocity = humanoidRootPart.AssemblyLinearVelocity
-	local newY = currentVelocity.Y
 
-	-- If Y-velocity is positive/zero, we hit a wall. Cancel float upward drift.
-	-- If Y-velocity is negative, we hit a ceiling and bounced down. Amplify the downward bounce!
-	if newY > -0.5 then
-		newY = 0
-	else
-		newY = newY * BOUNCE_MULTIPLIER
+	-- On the very first collision, cancel the vertical float speed up if we hit a wall
+	if not floatSpeedCanceled then
+		floatSpeedCanceled = true
+		if currentVelocity.Y > -0.5 then
+			currentVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z) -- Halt vertical rising
+		end
 	end
 
-	-- Apply the bounce multiplier to amplify X and Z speed upon impact!
-	local finalVelocity =
-		Vector3.new(currentVelocity.X * BOUNCE_MULTIPLIER, newY, currentVelocity.Z * BOUNCE_MULTIPLIER)
-
+	-- Apply the bounce multiplier to amplify speed on ALL axes (X, Y, Z)!
+	local finalVelocity = currentVelocity * BOUNCE_MULTIPLIER
 	humanoidRootPart.AssemblyLinearVelocity = finalVelocity
+
+	-- Wait a small cooldown so we fly away from the wall before we can bounce again
+	task.wait(0.15)
+	hasBounced = false
 end
 
 local function connectTouched()
@@ -196,6 +201,7 @@ toggleFloating = function()
 
 	if isFloating then
 		hasBounced = false
+		floatSpeedCanceled = false
 
 		-- 1. Eject if currently sitting
 		if humanoid.Sit then
@@ -256,7 +262,7 @@ toggleFloating = function()
 		applyBouncePhysics()
 		connectTouched()
 
-		print("Hyper-Bouncy Zero-G: Enabled!")
+		print("Infinite Bouncing Zero-G: Enabled!")
 	else
 		-- Restore normal gravity, materials, drag, and controls
 		if zeroGravityForce then
@@ -278,7 +284,7 @@ toggleFloating = function()
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
 		humanoid.PlatformStand = false
 
-		print("Hyper-Bouncy Zero-G: Disabled.")
+		print("Infinite Bouncing Zero-G: Disabled.")
 	end
 end
 
