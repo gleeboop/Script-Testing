@@ -85,6 +85,10 @@ local DD_ITEM_H = 24
 
 -- ── UI instances ──────────────────────────────────────────────────────────────
 local Gui = Instance.new("ScreenGui")
+local ClickSound = Instance.new("Sound", Gui)
+local OnSound = Instance.new("Sound", Gui)
+local OffSound = Instance.new("Sound", Gui)
+local loadSound = Instance.new("Sound", Gui)
 local Main = Instance.new("Frame")
 local TitleLabel = Instance.new("TextLabel")
 local TabBar = Instance.new("Frame")
@@ -204,6 +208,8 @@ TabBar.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
 TabBar.BorderSizePixel = 0
 TabBar.Position = UDim2.new(0, 0, 0, 36)
 TabBar.Size = UDim2.new(1, 0, 0, 32)
+
+ClickSound.Volume = 1
 
 local function styleTab(btn, txt, x, active)
 	btn.Parent = TabBar
@@ -447,6 +453,7 @@ local function refreshConfigList()
 	end
 	-- List files from the OrbitIsland folder
 	pcall(makefolder, "OrbitIsland")
+    pcall(makefolder, "OrbitIsland/Sounds")
 	local ok, files = pcall(listfiles, "OrbitIsland")
 	if not ok or type(files) ~= "table" then
 		-- fallback: try listing root
@@ -480,6 +487,7 @@ local function refreshConfigList()
 			mkCorner(row, 4)
 			local selName = cfgName
 			row.MouseButton1Click:Connect(function()
+                ClickSound:Play()
 				selectedConfigName = selName
 				ConfigNameBox.Text = selName
 				refreshConfigList()
@@ -519,6 +527,7 @@ local function serializeConfig()
 end
 
 cfgSaveBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	-- Strip to safe filename chars (no spaces, no slashes)
 	local raw = (ConfigNameBox.Text or ""):match("^%s*(.-)%s*$")
 	local name = raw:gsub("[^%w%-_.]", "")
@@ -616,6 +625,7 @@ local function applyConfig(data)
 end
 
 cfgLoadBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	local raw = (ConfigNameBox.Text or ""):match("^%s*(.-)%s*$")
 	local name = raw:gsub("[^%w%-_.]", "")
 	if name == "" then
@@ -633,6 +643,7 @@ end)
 
 -- ── Delete button ─────────────────────────────────────────────────────────────
 cfgDelBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	local raw = (ConfigNameBox.Text or ""):match("^%s*(.-)%s*$")
 	local name = raw:gsub("[^%w%-_.]", "")
 	if name == "" then
@@ -651,6 +662,11 @@ cfgDelBtn.MouseButton1Click:Connect(function()
 		cfgStatusLbl.Text = "Err: " .. tostring(err):sub(1, 40)
 	end
 end)
+
+writefile("OrbitIsland/Sounds/Click.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/CLICKEDME!.wav"))
+writefile("OrbitIsland/Sounds/LOADSOUND.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/GLEEBGEEKER.wav"))
+writefile("OrbitIsland/Sounds/OrbitOn.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/OrbitOn.wav"))
+writefile("OrbitIsland/Sounds/OrbitOff.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/OrbitOff.wav"))
 
 -- Refresh list when Config tab is opened
 TabConfig.MouseButton1Click:Connect(refreshConfigList)
@@ -820,18 +836,23 @@ local function switchTab(idx)
 	end
 end
 TabShapes.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	switchTab(1)
 end)
 TabSettings.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	switchTab(2)
 end)
 TabProtect.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	switchTab(3)
 end)
 TabTarget.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	switchTab(4)
 end)
 TabConfig.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	switchTab(5)
 end)
 
@@ -1207,12 +1228,15 @@ end
 
 -- ── Protect tab buttons ───────────────────────────────────────────────────────
 GodBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	setGodmode(not godEnabled)
 end)
 AntiFallBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	setAntiFall(not antiFallEnabled)
 end)
 AntiFlingBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	setAntiFling(not antiFlingEnabled)
 end)
 
@@ -1510,6 +1534,7 @@ local function populateAndOpenDropdown()
 				row.BackgroundColor3 = (selectedPlayer == entry.player) and P.sel or P.row
 			end)
 			row.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 				closeDropdown()
 				if entry.player == nil then
 					clearSelectedPlayer()
@@ -1526,6 +1551,7 @@ local function populateAndOpenDropdown()
 	DropdownList.Visible = true
 end
 DropdownBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if dropdownOpen then
 		closeDropdown()
 	else
@@ -1543,6 +1569,7 @@ local function cancelClickMode()
 end
 
 PlaceBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if clickMode == "place" then
 		cancelClickMode()
 	else
@@ -1553,12 +1580,14 @@ PlaceBtn.MouseButton1Click:Connect(function()
 	end
 end)
 IslandBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	orbitMode = "island"
 	CenterPart.Transparency = 1
 	ModeLabel.Text = "Mode:  Island  (workspace.Island)"
 	cancelClickMode()
 end)
 ClickPlayerBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if clickMode == "player" then
 		cancelClickMode()
 	else
@@ -1570,6 +1599,7 @@ ClickPlayerBtn.MouseButton1Click:Connect(function()
 	end
 end)
 FlingBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if flinging then
 		return
 	end
@@ -1605,6 +1635,7 @@ FlingBtn.MouseButton1Click:Connect(function()
 	end)
 end)
 LoopFlingBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if not loopFlinging then
 		if not selectedPlayer or not selectedPlayer.Character then
 			PlayerLabel.Text = "⚠  No player selected!"
@@ -1642,6 +1673,7 @@ LoopFlingBtn.MouseButton1Click:Connect(function()
 	end
 end)
 SpectateBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 	if not spectating then
 		if not selectedPlayer then
 			PlayerLabel.Text = "⚠  No player selected!"
@@ -1945,6 +1977,7 @@ local function buildShapeList()
 			end
 		end)
 		btn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 			if shapeButtons[currentShapeIndex] then
 				shapeButtons[currentShapeIndex].BackgroundColor3 = P.row
 			end
@@ -2088,6 +2121,7 @@ local function buildSettingsSliders()
 	FlySystemBtn.AutoButtonColor = false
 	mkCorner(FlySystemBtn, 5)
 	FlySystemBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 		flySystemEnabled = not flySystemEnabled
 		if not flySystemEnabled then
 			if flying then
@@ -2120,6 +2154,7 @@ local function buildSettingsSliders()
 	FlyBtn.AutoButtonColor = false
 	mkCorner(FlyBtn, 5)
 	FlyBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 		if flySystemEnabled then
 			toggleFly()
 		end
@@ -2156,6 +2191,7 @@ local function buildSettingsSliders()
 	KeybindBtn.AutoButtonColor = false
 	mkCorner(KeybindBtn, 4)
 	KeybindBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 		if rebindingFly then
 			rebindingFly = false
 			KeybindBtn.Text = "Key: " .. tostring(flyKeybind.Name)
@@ -2209,6 +2245,7 @@ local function buildSettingsSliders()
 	OrbitKeybindBtn.AutoButtonColor = false
 	mkCorner(OrbitKeybindBtn, 4)
 	OrbitKeybindBtn.MouseButton1Click:Connect(function()
+    ClickSound:Play()
 		if rebindingOrbit then
 			rebindingOrbit = false
 			OrbitKeybindBtn.Text = "Key: " .. tostring(orbitKeybind.Name)
@@ -2309,6 +2346,8 @@ end
 toggleOrbit = function()
 	blackHoleActive = not blackHoleActive
 	if blackHoleActive then
+        OnSound:Play()
+        OffSound:Stop()
 		OrbitBtn.Text = "Orbit  |  On"
 		OrbitBtn.BackgroundColor3 = P.green
 		cleanupOrbitParts()
@@ -2348,6 +2387,8 @@ toggleOrbit = function()
 			end
 		end)
 	else
+        OffSound:Play()
+        OnSound:Stop()
 		OrbitBtn.Text = "Orbit  |  Off"
 		OrbitBtn.BackgroundColor3 = P.row
 		loopFlinging = false
@@ -2366,6 +2407,11 @@ end
 -- ============================================================================
 buildShapeList()
 buildSettingsSliders()
+loadSound.SoundId = getcustomasset("OrbitIsland/Sounds/LOADSOUND.wav")
+ClickSound.SoundId = getcustomasset("OrbitIsland/Sounds/Click.wav")
+OnSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOn.wav")
+OffSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOff.wav")
+loadSound:Play()
 
 -- Wire OrbitBtn click directly (no Script instance needed in LocalScript context)
 OrbitBtn.MouseButton1Click:Connect(function()
