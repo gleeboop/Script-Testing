@@ -2248,6 +2248,7 @@ local function ForcePart(v)
 		v:IsA("BasePart")
 		and not v.Anchored
 		and not v:IsDescendantOf(IslandModel)
+		and not v:IsDescendantOf(LocalPlayer.Character)
 		and not v.Parent:FindFirstChildOfClass("Humanoid")
 		and not v.Parent:FindFirstChild("Head")
 		and v.Name ~= "Handle"
@@ -2311,7 +2312,7 @@ toggleOrbit = function()
 		OrbitBtn.Text = "Orbit  |  On"
 		OrbitBtn.BackgroundColor3 = P.green
 		cleanupOrbitParts()
-		for _, v in ipairs(Workspace:GetDescendants()) do
+		for _, v in ipairs(getinstances()) do
 			ForcePart(v)
 		end
 		DescendantAddedConnection = Workspace.DescendantAdded:Connect(function(v)
