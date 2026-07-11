@@ -25,7 +25,12 @@ local Config = {
 	HELIX_SPAN = 18,
 	ORBIT_TILT_X = 0,
 	ORBIT_TILT_Z = 0,
+	RING_COUNT = 1,
+	TILT_FACTOR = 0,
 }
+
+-- ── Multi-ring state ─────────────────────────────────────────────────────────
+local MAX_RINGS = 8
 
 local SETTING_DEFS = {
 	{ label = "Radius", key = "ORBIT_RADIUS", min = 2, max = 300, step = 1, fmt = "%.0f" },
@@ -831,17 +836,31 @@ toggleOrbit = function()
 				local origin = center + Vector3.new(0, Config.ORBIT_HEIGHT, 0)
 				local count = #orbitParts
 				local shape = SHAPES[currentShapeIndex]
-				local rx = math.rad(Config.ORBIT_TILT_X)
-				local rz = math.rad(Config.ORBIT_TILT_Z)
-				local cosX, sinX = math.cos(rx), math.sin(rx)
-				local cosZ, sinZ = math.cos(rz), math.sin(rz)
+				local ringCount = math.clamp(math.floor(Config.RING_COUNT), 1, MAX_RINGS)
+				local perRing = math.max(1, math.ceil(count / ringCount))
+
+				-- precompute each ring's tilt trig once per frame
+				-- rings fan out evenly across 180°, scaled by TILT_FACTOR
+				local rCosX, rSinX, rCosZ, rSinZ = {}, {}, {}, {}
+				for r = 1, ringCount do
+					local spread = (ringCount > 1) and ((r - 1) / ringCount) * 180 or 0
+					local rx = math.rad(Config.ORBIT_TILT_X + spread * Config.TILT_FACTOR)
+					local rz = math.rad(Config.ORBIT_TILT_Z)
+					rCosX[r], rSinX[r] = math.cos(rx), math.sin(rx)
+					rCosZ[r], rSinZ[r] = math.cos(rz), math.sin(rz)
+				end
+
 				for i, data in ipairs(orbitParts) do
 					if data.anchor and data.anchor.Parent then
-						local off = (i / math.max(count, 1)) * (2 * math.pi)
+						local ringIndex = math.min(math.floor((i - 1) / perRing) + 1, ringCount)
+						local inRing = (i - 1) % perRing
+						local off = (inRing / perRing) * (2 * math.pi)
 						local angle = t + off
 						local x, z, yExtra = shape.fn(angle, Config.ORBIT_RADIUS, i, count, t)
 						local y = (shape.name == "Helix") and yExtra
 							or math.sin(t * Config.Y_WAVE_SPEED + off) * Config.Y_WAVE_AMP + yExtra
+						local cosX, sinX = rCosX[ringIndex], rSinX[ringIndex]
+						local cosZ, sinZ = rCosZ[ringIndex], rSinZ[ringIndex]
 						local y1 = y * cosX - z * sinX
 						local z1 = y * sinX + z * cosX
 						local x2 = x * cosZ - y1 * sinZ
@@ -972,6 +991,32 @@ for _, def in ipairs(SETTING_DEFS) do
 		end,
 	})
 end
+
+RingsSettings:Space()
+RingsSettings:Divider()
+RingsSettings:Section({ Title = "Multi-Ring" })
+
+RingsSettings:Slider({
+	Title = "Ring Count",
+	Flag = "RingCount",
+	Step = 1,
+	Value = { Min = 1, Max = MAX_RINGS, Default = Config.RING_COUNT },
+	Callback = function(value)
+		Config.RING_COUNT = value
+	end,
+})
+
+RingsSettings:Space()
+
+RingsSettings:Slider({
+	Title = "Tilt Factor",
+	Flag = "TiltFactor",
+	Step = 0.05,
+	Value = { Min = 0, Max = 2, Default = Config.TILT_FACTOR },
+	Callback = function(value)
+		Config.TILT_FACTOR = value
+	end,
+})
 
 RingsSettings:Space()
 
@@ -1529,6 +1574,77 @@ themeDrop = Info:Dropdown({
 		if themeDrop then
 			pcall(function() themeDrop:Close() end)
 		end
+	end,
+})
+
+Info:Section({ Title = "Server" })
+
+local HttpService = game:GetService("HttpService")
+
+local function serverHop()
+	local placeId = game.PlaceId
+	local jobId = game.JobId
+	WindUI:Notify({ Title = "Server Hop", Content = "Finding a new server...", Duration = 3 })
+	local cursor = ""
+	for _ = 1, 5 do
+		local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"):format(placeId)
+		if cursor ~= "" then
+			url = url .. "&cursor=" .. cursor
+		end
+		local ok, body = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if not ok then
+			WindUI:Notify({ Title = "Server Hop", Content = "Request failed, try again", Duration = 4 })
+			return
+		end
+		local decoded
+		local decodeOk = pcall(function()
+			decoded = HttpService:JSONDecode(body)
+		end)
+		if not decodeOk or type(decoded) ~= "table" then
+			WindUI:Notify({ Title = "Server Hop", Content = "Could not read server list", Duration = 4 })
+			return
+		end
+		if decoded.data then
+			-- shuffle so we don't always hit the same server
+			local servers = {}
+			for _, s in ipairs(decoded.data) do
+				table.insert(servers, s)
+			end
+			for i = #servers, 2, -1 do
+				local j = math.random(i)
+				servers[i], servers[j] = servers[j], servers[i]
+			end
+			for _, s in ipairs(servers) do
+				if s.id ~= jobId and type(s.playing) == "number" and type(s.maxPlayers) == "number" and s.playing < s.maxPlayers then
+					local tpOk = pcall(function()
+						TeleportService:TeleportToPlaceInstance(placeId, s.id, LocalPlayer)
+					end)
+					if tpOk then
+						WindUI:Notify({ Title = "Server Hop", Content = "Teleporting to a new server...", Duration = 4 })
+						return
+					end
+				end
+			end
+		end
+		if decoded.nextPageCursor and decoded.nextPageCursor ~= "" then
+			cursor = decoded.nextPageCursor
+			task.wait(0.2)
+		else
+			break
+		end
+	end
+	queueonteleport()
+	WindUI:Notify({ Title = "Server Hop", Content = "No other servers found", Duration = 4 })
+end
+
+Info:Button({
+	Title = "Server Hop",
+	Desc = "Teleport to a different public server",
+	Icon = "server",
+	Callback = function()
+		serverHop()
 	end,
 })
 
