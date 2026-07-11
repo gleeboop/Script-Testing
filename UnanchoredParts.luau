@@ -1635,7 +1635,7 @@ local function serverHop()
 			break
 		end
 	end
-	queueonteleport()
+	queueonteleport(loadstring(game:HttpGet(("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/UnanchoredParts.luau"),true))())
 	WindUI:Notify({ Title = "Server Hop", Content = "No other servers found", Duration = 4 })
 end
 
