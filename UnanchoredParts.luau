@@ -2351,7 +2351,7 @@ toggleOrbit = function()
 		OrbitBtn.Text = "Orbit  |  On"
 		OrbitBtn.BackgroundColor3 = P.green
 		cleanupOrbitParts()
-		for _, v in ipairs(getinstances()) do
+		for _, v in ipairs(workspace:GetDescendants()) do
 			ForcePart(v)
 		end
 		DescendantAddedConnection = Workspace.DescendantAdded:Connect(function(v)
@@ -2407,10 +2407,10 @@ end
 -- ============================================================================
 buildShapeList()
 buildSettingsSliders()
-loadSound.SoundId = getcustomasset("OrbitIsland/Sounds/LOADSOUND.wav")
-ClickSound.SoundId = getcustomasset("OrbitIsland/Sounds/Click.wav")
-OnSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOn.wav")
-OffSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOff.wav")
+-- loadSound.SoundId = getcustomasset("OrbitIsland/Sounds/LOADSOUND.wav")
+-- ClickSound.SoundId = getcustomasset("OrbitIsland/Sounds/Click.wav")
+-- OnSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOn.wav")
+-- OffSound.SoundId = getcustomasset("OrbitIsland/Sounds/OrbitOff.wav")
 loadSound:Play()
 
 -- Wire OrbitBtn click directly (no Script instance needed in LocalScript context)
