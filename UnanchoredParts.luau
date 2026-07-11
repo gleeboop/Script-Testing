@@ -1620,10 +1620,10 @@ local function serverHop()
 				if s.id ~= jobId and type(s.playing) == "number" and type(s.maxPlayers) == "number" and s.playing < s.maxPlayers then
 					local tpOk = pcall(function()
 						TeleportService:TeleportToPlaceInstance(placeId, s.id, LocalPlayer)
+						queueonteleport("loadstring(game:HttpGet(('https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/UnanchoredParts.luau'),true))()")
 					end)
 					if tpOk then
 						WindUI:Notify({ Title = "Server Hop", Content = "Teleporting to a new server...", Duration = 4 })
-						queueonteleport("loadstring(game:HttpGet(('https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/UnanchoredParts.luau'),true))()")
 						return
 					end
 				end
@@ -1662,3 +1662,5 @@ WindUI:Notify({
 	Icon = "check",
 	Duration = 5,
 })
+
+print("SUPER RING LOADED - created by gleebfreak")
