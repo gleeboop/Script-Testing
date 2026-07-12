@@ -1164,6 +1164,7 @@ TargetTab:Space()
 local targetDrop
 targetDrop = TargetTab:Dropdown({
 	Title = "Ring Center",
+	Flag = "RingCenter",
 	Desc = "Select what the ring revolves around. Island only works on Natural Disaster Survival.",
 	Values = { "Self", "Player", "Click to Place", "Island" },
 	Value = "Self",
@@ -1461,10 +1462,32 @@ ConfigTab:Button({
 		local CM = Window.ConfigManager
 		Window.CurrentConfig = CM:CreateConfig(name)
 		if Window.CurrentConfig:Load() then
-			-- force theme to match the loaded dropdown value
-			pcall(function()
-				local v = themeDrop and themeDrop.Value
-				if v then WindUI:SetTheme(tostring(v):gsub(" ", "")) end
+			-- defer so WindUI finishes restoring every element before we read values back;
+			-- this prevents the mid-load glitch when multiple saved configs exist
+			task.defer(function()
+				-- re-apply theme from the loaded dropdown value
+				pcall(function()
+					local v = themeDrop and themeDrop.Value
+					if v then WindUI:SetTheme(tostring(v):gsub(" ", "")) end
+				end)
+				-- re-apply ring center: map the saved label back to orbitMode
+				pcall(function()
+					local v = targetDrop and targetDrop.Value
+					if v == "Self" then
+						orbitMode = "self"
+						CenterPart.Transparency = 1
+					elseif v == "Player" then
+						orbitMode = "player"
+						CenterPart.Transparency = 1
+					elseif v == "Island" then
+						orbitMode = "island"
+						CenterPart.Transparency = 1
+					else
+						-- "Click to Place" (or anything unexpected) can't be restored; fall back to Self
+						orbitMode = "self"
+						CenterPart.Transparency = 1
+					end
+				end)
 			end)
 			WindUI:Notify({ Title = "Config Loaded", Content = "'" .. name .. "' loaded", Icon = "check", Duration = 4 })
 		end
@@ -1619,8 +1642,12 @@ local function serverHop()
 			for _, s in ipairs(servers) do
 				if s.id ~= jobId and type(s.playing) == "number" and type(s.maxPlayers) == "number" and s.playing < s.maxPlayers then
 					local tpOk = pcall(function()
+						queueonteleport([[
+							print("Attempting to load loadstring off teleport. Waiting 1 seconds.")
+							task.wait(1)
+							loadstring(game:HttpGet(('https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/UnanchoredParts.luau'),true))()
+						]])
 						TeleportService:TeleportToPlaceInstance(placeId, s.id, LocalPlayer)
-						queueonteleport([[loadstring(game:HttpGet(('https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/UnanchoredParts.luau'),true))()]])
 					end)
 					if tpOk then
 						WindUI:Notify({ Title = "Server Hop", Content = "Teleporting to a new server...", Duration = 4 })
@@ -1662,5 +1689,3 @@ WindUI:Notify({
 	Icon = "check",
 	Duration = 5,
 })
-
-print("SUPER RING LOADED - created by gleebfreak")
