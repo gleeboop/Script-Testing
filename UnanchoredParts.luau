@@ -1,8 +1,3 @@
--- ============================================================================
--- ORBIT ISLAND  |  WindUI Edition
--- Tabs: Shapes • Settings • Protect • Target • Config
--- ============================================================================
-
 -- ── Services ─────────────────────────────────────────────────────────────────
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -44,7 +39,11 @@ local SETTING_DEFS = {
 }
 
 -- ── Load WindUI ──────────────────────────────────────────────────────────────
-local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+local _version = "1.6.66"
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/" .. _version .. "/main.lua"))() 
+
+WindUI:SetParent(game.CoreGui)
+WindUI:ToggleAcrylic(true)
 
 -- ── State ────────────────────────────────────────────────────────────────────
 local orbitMode = "island"
@@ -56,6 +55,7 @@ local spectateConn = nil
 local flinging = false
 local loopFlinging = false
 local spectating = false
+local SoundEnable = true
 
 -- Protection state
 local noclipEnabled = false
@@ -72,9 +72,12 @@ local flySystemEnabled = true
 local toggleOrbit -- forward declaration
 local playerDropdown
 local themeDrop
+local spectateToggle
 local flyKeybind = Enum.KeyCode.F
 local orbitKeybind = Enum.KeyCode.V
 local UIToggle = Enum.KeyCode.RightControl
+local spectateKeybind = Enum.KeyCode.C
+local selectionPlayer = Enum.KeyCode.X
 local flying = false
 local flySpeed = 50
 local flySpeedMult = 3
@@ -84,6 +87,16 @@ local flyAttachment, flyLV, flyAO
 -- PlayerModule (fly controls)
 local PlayerModule = require(LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"))
 local Controls = PlayerModule:GetControls()
+
+local loadSound = Instance.new("Sound", script.Parent)
+local clickSound = Instance.new("Sound", script.Parent)
+local OnSound = Instance.new("Sound", script.Parent)
+local OffSound = Instance.new("Sound", script.Parent)
+
+writefile("WindUI/OrbitIsland/assets/Click.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/CLICKEDME!.wav"))
+writefile("WindUI/OrbitIsland/assets/LOADSOUND.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/GLEEBGEEKER.wav"))
+writefile("WindUI/OrbitIsland/assets/OrbitOn.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/OrbitOn.wav"))
+writefile("WindUI/OrbitIsland/assets/OrbitOff.wav", game:HttpGet("https://raw.githubusercontent.com/gleeboop/Script-Testing/refs/heads/main/assets/OrbitOff.wav"))
 
 -- ============================================================================
 -- PROTECTION SYSTEMS
@@ -580,6 +593,7 @@ local function cancelClickMode()
 	clickMode = nil
 end
 
+local spectate = false
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe then
 		return
@@ -599,6 +613,24 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 		cancelClickMode()
 		return
 	end
+	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == spectateKeybind then
+		spectate = not spectate
+		if spectateToggle then
+			spectateToggle:Set(spectate)
+		end
+		return
+	end
+	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == selectionPlayer then
+		if clickMode == "player" then
+			cancelClickMode()
+		else
+			cancelClickMode()
+			clickMode = "player"
+			WindUI:Notify({ Title = "Select Player", Content = "Click on a player to select", Duration = 5 })
+		end
+	end
+
+	
 	-- Raycast for click modes
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		if clickMode == nil then
@@ -888,6 +920,15 @@ toggleOrbit = function()
 	end
 end
 
+local function stopSounds(state: boolean)
+	local volume = (state == true) and .5 or 0
+	loadSound.Volume = volume
+	clickSound.Volume = volume
+	OffSound.Volume = volume
+	OnSound.Volume = volume
+	print(volume, state)
+end
+
 -- ============================================================================
 -- WINDUI WINDOW
 -- ============================================================================
@@ -919,6 +960,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:SetToggleKey(UIToggle)
+Window:SetAuthor("gleebfreak")
 
 -- ── Colors ───────────────────────────────────────────────────────────────────
 local Blue = Color3.fromHex("#257AF7")
@@ -1124,6 +1166,24 @@ KeybindSection:Keybind({
 })
 
 KeybindSection:Keybind({
+	Title = "Spectate Keybind",
+	Flag = "SpectateKeybind",
+	Value = tostring(spectateKeybind.Name),
+	Callback = function(key)
+		spectateKeybind = Enum.KeyCode[key]
+	end
+})
+
+KeybindSection:Keybind({
+	Title = "Player Selection Keybind",
+	Flag = "PlayerSectKeybind",
+	Value = tostring(selectionPlayer.Name),
+	Callback = function(key)
+		selectionPlayer = Enum.KeyCode[key]
+	end
+})
+
+KeybindSection:Keybind({
 	Title = "Toggle UI",
 	Flag = "UIToggle",
 	Value = tostring(UIToggle.Name),
@@ -1131,6 +1191,101 @@ KeybindSection:Keybind({
 		UIToggle = Enum.KeyCode[key]
 		Window:SetToggleKey(UIToggle)
 	end,
+})
+
+local SoundSection = SettingSection:Tab({
+	Title = "Sounds",
+	Icon = "solar:soundwave-line-duotone",
+	Border = true,
+})
+
+SoundSection:Toggle({
+	Title = "Enable Sounds",
+	Flag = "SoundEnable",
+	Desc = "Enable/disable UI Sounds",
+	Value = SoundEnable,
+	Callback = function(state)
+		SoundEnable = state
+		stopSounds(SoundEnable)
+	end,
+})
+
+SoundSection:Space()
+SoundSection:Divider()
+
+SoundSection:Section({
+	Title = "Set Custom Sounds",
+	Desc = "Custom sounds must be uploaded to workspace/WindUI/OrbitIsland/assets."
+})
+
+SoundSection:Space()
+
+SoundSection:Input({
+	Title = "Load Sound",
+	Placeholder = "File Name",
+	Flag = "LoadSound",
+	Value = "LOADSOUND.wav",
+	Callback = function(text)
+		local asset = isfile("WindUI/OrbitIsland/assets/"..tostring(text))
+		if asset then
+			loadSound.SoundId = getcustomasset("WindUI/OrbitIsland/assets/"..tostring(text))
+			WindUI:Notify({ Title = "Load Sound", Content = "Loaded file!", Duration = 4})
+		else
+			WindUI:Notify({ Title = "Load Sound", Content = "File not found.", Duration = 4})
+		end
+		
+	end
+})
+
+SoundSection:Input({
+	Title = "Click Sound",
+	Placeholder = "File Name",
+	Flag = "ClickSound",
+	Value = "Click.wav",
+	Callback = function(text)
+		local asset = isfile("WindUI/OrbitIsland/assets/"..tostring(text))
+		if asset then
+			loadSound.SoundId = getcustomasset("WindUI/OrbitIsland/assets/"..tostring(text))
+			WindUI:Notify({ Title = "Load Sound", Content = "Loaded file!", Duration = 4})
+		else
+			WindUI:Notify({ Title = "Load Sound", Content = "File not found.", Duration = 4})
+		end
+		
+	end
+})
+
+SoundSection:Input({
+	Title = "On Sound",
+	Placeholder = "File Name",
+	Flag = "OnSound",
+	Value = "OrbitOff.wav",
+	Callback = function(text)
+		local asset = isfile("WindUI/OrbitIsland/assets/"..tostring(text))
+		if asset then
+			loadSound.SoundId = getcustomasset("WindUI/OrbitIsland/assets/"..tostring(text))
+			WindUI:Notify({ Title = "Load Sound", Content = "Loaded file!", Duration = 4})
+		else
+			WindUI:Notify({ Title = "Load Sound", Content = "File not found.", Duration = 4})
+		end
+		
+	end
+})
+
+SoundSection:Input({
+	Title = "Off Sound",
+	Placeholder = "File Name",
+	Flag = "OffSound",
+	Value = "OrbitOn.wav",
+	Callback = function(text)
+		local asset = isfile("WindUI/OrbitIsland/assets/"..tostring(text))
+		if asset then
+			loadSound.SoundId = getcustomasset("WindUI/OrbitIsland/assets/"..tostring(text))
+			WindUI:Notify({ Title = "Load Sound", Content = "Loaded file!", Duration = 4})
+		else
+			WindUI:Notify({ Title = "Load Sound", Content = "File not found.", Duration = 4})
+		end
+		
+	end
 })
 
 -- ============================================================================
@@ -1203,7 +1358,9 @@ targetDrop = TargetTab:Dropdown({
 	end,
 })
 -- ── Player Fling ─────────────────────────────────────────────────────────────
+
 TargetTab:Space()
+TargetTab:Divider()
 
 TargetTab:Section({ Title = "Player Fling" })
 
@@ -1366,7 +1523,7 @@ loopFlingToggle = TargetTab:Toggle({
 
 TargetTab:Space()
 
-local spectateToggle
+
 spectateToggle = TargetTab:Toggle({
 	Title = "Spectate",
 	Flag = "Spectate",
@@ -1675,9 +1832,12 @@ Info:Button({
 	end,
 })
 
+Info:Space()
+Info:Divider()
+
 Info:Section({
 	Title = "Credits",
-	Desc = "Super Rings created by Lukas.\nUI Library used: WindUI.\nCreated by gleebfreak."
+	Desc = "Super Rings created by Lukas.\nUI Library used: WindUI.\nCreated by gleebfreak.\n Created with Claude Code."
 })
 
 -- ============================================================================
@@ -1689,3 +1849,6 @@ WindUI:Notify({
 	Icon = "check",
 	Duration = 5,
 })
+
+task.wait(1)
+loadSound:Play()
